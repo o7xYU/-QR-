@@ -1,7 +1,7 @@
 {
   "name": "custom-qr-plugin",
   "display_name": "自定义QR插件",
-  "version": "1.0",
+  "version": "1.0/BunnY制作",
   "manifest_version": 2,
   "description": "一个完全可自定义的快捷输入面板。您可以自由编辑每个功能块的插入格式。",
   "js": ["script.js"],
