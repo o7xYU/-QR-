@@ -1,4 +1,4 @@
-/* style.css (v1.0) */
+/* style.css (v1.7) - Modified for Custom QR Plugin v1.0 */
 :root {
     --cip-panel-bg-color: rgba(255, 255, 255, 0.8);
     --cip-border-color: rgba(255, 255, 255, 0.4);
@@ -7,6 +7,7 @@
     --cip-active-bg-color: rgba(255, 127, 80, 0.3);
     --cip-input-bg-color: rgba(255, 255, 255, 0.5);
     --cip-delete-color: #e74c3c;
+    --cip-add-color: #2ecc71;
     --cip-border-radius: 12px;
     --cip-transition-speed: 0.3s;
 }
@@ -27,6 +28,7 @@
     z-index: 1000;
     transition: transform 0.2s ease;
     user-select: none;
+    color: white;
 }
 
 #cip-carrot-button.is-dragging {
@@ -40,19 +42,17 @@
     border-radius: var(--cip-border-radius);
     border: 1px solid var(--cip-border-color);
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    color: var(--cip-text-color);
 }
-
 #cip-carrot-button:hover { transform: scale(1.1); }
 #cip-input-panel {
-    position: fixed;
-    width: 350px;
-    max-width: 90vw;
-    display: none;
-    flex-direction: column;
-    z-index: 1001;
+    position: fixed; width: 350px; max-width: 90vw; display: none;
+    flex-direction: column; z-index: 1001; opacity: 0;
+    transition: opacity var(--cip-transition-speed) ease, transform var(--cip-transition-speed) ease;
+    transform: scale(0.95);
 }
 #cip-input-panel.active { display: flex; opacity: 1; transform: scale(1); }
-#cip-panel-tabs { display: flex; padding: 8px; border-bottom: 1px solid var(--cip-border-color); }
+#cip-panel-tabs { display: flex; padding: 8px; border-bottom: 1px solid var(--cip-border-color); flex-wrap: wrap; gap: 5px; }
 .cip-tab-button {
     flex-grow: 1; padding: 8px 12px; border: none; background: transparent; cursor: pointer;
     font-size: 14px; color: var(--cip-text-color); border-radius: 8px;
@@ -79,19 +79,23 @@
 #cip-add-category-btn { font-weight: bold; width: 28px; height: 28px; padding: 0; border-radius: 50%; }
 .cip-category-action-icon { cursor: pointer; font-style: normal; }
 .cip-delete-category-btn { color: var(--cip-delete-color); }
-#cip-main-input, #cip-voice-message, #cip-cheat-input, #cip-new-stickers-input {
-    width: calc(100% - 20px); min-height: 80px; padding: 10px; border: none;
+
+/* Generic Input Style */
+.cip-input {
+    width: calc(100% - 22px); /* 100% - padding*2 - border*2 */
+    padding: 10px; border: 1px solid var(--cip-border-color);
     border-radius: var(--cip-border-radius); background-color: var(--cip-input-bg-color);
-    font-size: 14px; resize: vertical;
+    font-size: 14px; resize: vertical; color: var(--cip-text-color);
 }
-#cip-voice-duration, #cip-new-category-name, #cip-format-template-input {
-    width: calc(100% - 20px); padding: 10px; border: none;
-    border-radius: var(--cip-border-radius); background-color: var(--cip-input-bg-color); font-size: 14px;
-}
+.cip-input[type="text"] { min-height: auto; height: 20px; }
+.cip-input[type="number"] { min-height: auto; height: 20px; }
+textarea.cip-input { min-height: 80px; }
+
+
 #cip-panel-footer { display: flex; justify-content: space-between; align-items: center; padding: 0 12px 12px 12px; }
-#cip-emoji-picker-btn, #cip-settings-btn { font-size: 24px; cursor: pointer; opacity: 0.7; transition: opacity var(--cip-transition-speed); position: relative; }
-#cip-emoji-picker-btn:hover, #cip-settings-btn:hover { opacity: 1; }
-.cip-footer-actions { display: flex; gap: 8px; }
+#cip-emoji-picker-btn, #cip-settings-button { font-size: 24px; cursor: pointer; opacity: 0.7; transition: opacity var(--cip-transition-speed); position: relative; background: none; border: none; padding: 0; color: var(--cip-text-color); }
+#cip-emoji-picker-btn:hover, #cip-settings-button:hover { opacity: 1; }
+.cip-footer-actions { display: flex; gap: 8px; align-items: center; }
 #cip-recall-button, #cip-insert-button {
     padding: 8px 20px; border: none; border-radius: 8px; font-size: 16px;
     font-weight: bold; cursor: pointer; transition: background-color var(--cip-transition-speed);
@@ -99,8 +103,8 @@
 #cip-recall-button { background-color: #ddd; color: #444; }
 #cip-recall-button:hover { background-color: #ccc; }
 #cip-insert-button { background-color: var(--cip-accent-color); color: white; }
-#cip-insert-button:hover { background-color: #e56a40; }
-emoji-picker, #cip-settings-panel {
+#cip-insert-button:hover { filter: brightness(1.1); }
+emoji-picker {
     position: fixed;
     z-index: 1002;
     display: none;
@@ -136,3 +140,54 @@ emoji-picker, #cip-settings-panel {
 .cip-modal-actions button { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; }
 .cip-modal-actions button:first-child { background: #eee; }
 .cip-modal-actions button:last-child { background: var(--cip-accent-color); color: white; }
+
+/* --- NEW STYLES FOR SETTINGS PANEL --- */
+#cip-settings-modal .cip-modal-content {
+    width: 500px;
+    max-width: 95vw;
+}
+
+#cip-settings-list {
+    max-height: 60vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    padding: 5px;
+}
+
+.cip-format-item {
+    display: grid;
+    grid-template-columns: 1fr 2fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border-radius: 8px;
+    background: var(--cip-input-bg-color);
+}
+
+.cip-format-item input {
+    padding: 8px;
+    border: 1px solid var(--cip-border-color);
+    border-radius: 5px;
+    background: var(--cip-panel-bg-color);
+    color: var(--cip-text-color);
+}
+
+.cip-format-item .cip-delete-format-btn {
+    background: none;
+    border: none;
+    color: var(--cip-delete-color);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0 5px;
+}
+
+#cip-settings-modal .cip-modal-actions {
+    justify-content: space-between;
+}
+
+#cip-add-format-btn {
+    background-color: var(--cip-add-color);
+    color: white;
+}
