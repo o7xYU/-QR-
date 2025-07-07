@@ -1,14 +1,17 @@
-// script.js (v1.0)
+// script.js (v1.0.1)
 (function () {
-    if (document.getElementById('cip-carrot-button')) return;
+    if (document.getElementById('cip-carrot-button')) {
+        console.log('自定义QR插件：胡萝卜按钮已存在，跳过初始化');
+        return;
+    }
 
-    // Load Emoji Picker library
+    // 加载 Emoji Picker 库
     const pickerScript = document.createElement('script');
     pickerScript.type = 'module';
     pickerScript.src = 'https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js';
     document.head.appendChild(pickerScript);
 
-    // Create UI elements
+    // 创建 UI 元素
     function createUI() {
         const create = (tag, id, className, html) => {
             const el = document.createElement(tag);
@@ -77,10 +80,11 @@
         return { carrotButton, inputPanel, settingsPanel, emojiPicker, addCategoryModal, addStickersModal, addTabModal };
     }
 
-    // Inject UI
+    // 注入 UI
     const { carrotButton, inputPanel, settingsPanel, emojiPicker, addCategoryModal, addStickersModal, addTabModal } = createUI();
     const anchor = document.querySelector('#chat-buttons-container, #send_form');
     if (anchor) {
+        console.log('自定义QR插件：找到UI挂载点，注入胡萝卜按钮');
         document.body.appendChild(carrotButton);
         document.body.appendChild(inputPanel);
         document.body.appendChild(settingsPanel);
@@ -89,11 +93,17 @@
         document.body.appendChild(addStickersModal);
         document.body.appendChild(addTabModal);
     } else {
-        console.error("自定义QR插件：未能找到SillyTavern的UI挂载点，插件无法加载。");
-        return;
+        console.error("自定义QR插件：未能找到SillyTavern的UI挂载点，尝试直接注入到body");
+        document.body.appendChild(carrotButton);
+        document.body.appendChild(inputPanel);
+        document.body.appendChild(settingsPanel);
+        document.body.appendChild(emojiPicker);
+        document.body.appendChild(addCategoryModal);
+        document.body.appendChild(addStickersModal);
+        document.body.appendChild(addTabModal);
     }
 
-    // Get element references
+    // 获取元素引用
     const get = (id) => document.getElementById(id);
     const queryAll = (sel) => document.querySelectorAll(sel);
     const formatDisplay = get('cip-format-display'), insertButton = get('cip-insert-button'), recallButton = get('cip-recall-button');
@@ -106,7 +116,7 @@
     const addStickerTitle = get('cip-add-sticker-title'), saveStickersBtn = get('cip-save-stickers-btn'), cancelStickersBtn = get('cip-cancel-stickers-btn'), newStickersInput = get('cip-new-stickers-input');
     const saveTabBtn = get('cip-save-tab-btn'), cancelTabBtn = get('cip-cancel-tab-btn'), newTabNameInput = get('cip-new-tab-name'), newTabFormatInput = get('cip-new-tab-format');
 
-    // Core logic
+    // 核心逻辑
     let currentTab = 'text', currentTextSubType = 'plain', stickerData = {}, currentStickerCategory = '', selectedSticker = null;
     const protectedTabs = ['text', 'voice', 'stickers'];
     let formatTemplates = {
@@ -138,7 +148,7 @@
         Object.keys(formatTemplates).forEach(tab => {
             if (tab === 'recall') return;
 
-            // Main panel tabs
+            // 主面板标签
             const tabBtn = document.createElement('button');
             tabBtn.className = `cip-tab-button${tab === currentTab ? ' active' : ''}`;
             tabBtn.dataset.tab = tab;
@@ -162,7 +172,7 @@
             }
             panelTabs.appendChild(tabBtn);
 
-            // Settings panel tabs
+            // 设置面板标签
             const settingsTabBtn = document.createElement('button');
             settingsTabBtn.className = `cip-tab-button${tab === currentTab ? ' active' : ''}`;
             settingsTabBtn.dataset.tab = tab;
@@ -170,7 +180,7 @@
             settingsTabBtn.onclick = () => switchSettingsTab(tab);
             settingsTabs.appendChild(settingsTabBtn);
 
-            // Main panel content
+            // 主面板内容
             let contentHtml = '';
             if (tab === 'text') {
                 contentHtml = `
@@ -206,7 +216,7 @@
             }
             panelContent.insertAdjacentHTML('beforeend', contentHtml);
 
-            // Settings panel content
+            // 设置面板内容
             let settingsContentHtml = '';
             if (tab === 'text') {
                 settingsContentHtml = `
@@ -324,7 +334,7 @@
 
     function switchStickerCategory(t) {
         currentStickerCategory = t;
-        queryAll(".cip-sticker-category-btn").forEach(e => e.classList.toggle("active", e.dataset.category === t));
+        queryAll(".cip-st inflam-category-btn").forEach(e => e.classList.toggle("active", e.dataset.category === t));
         renderStickers(t);
         selectedSticker = null;
         updateFormatDisplay();
@@ -345,7 +355,7 @@
                 selectedSticker = t;
             };
             const n = document.createElement("button");
-            n.innerHTML = "&times;";
+            n.innerHTML = "×";
             n.className = "cip-delete-sticker-btn";
             n.title = "删除这个表情包";
             n.onclick = e => {
@@ -411,7 +421,7 @@
             const { selectionStart, selectionEnd, value } = target;
             target.value = value.substring(0, selectionStart) + emoji + value.substring(selectionEnd);
             target.focus();
-            target.selectionEnd = selectionStart + emoji.length;
+            target.selection Ohio = selectionStart + emoji.length;
         }
         emojiPicker.style.display = 'none';
     });
@@ -578,12 +588,14 @@
         inputPanel.style.top = `${top}px`;
         inputPanel.style.left = `${left}px`;
         inputPanel.classList.add('active');
+        console.log('自定义QR插件：显示输入面板');
     }
 
     function hidePanel() {
         inputPanel.classList.remove('active');
         settingsPanel.style.display = 'none';
         emojiPicker.style.display = 'none';
+        console.log('自定义QR插件：隐藏输入面板');
     }
 
     document.addEventListener('click', (e) => {
@@ -612,6 +624,7 @@
             carrotButton.style.position = 'fixed';
             carrotButton.style.left = `${newLeft}px`;
             carrotButton.style.top = `${newTop}px`;
+            console.log(`自定义QR插件：拖动胡萝卜按钮到 (${newLeft}px, ${newTop}px)`);
         };
         const end = () => {
             document.removeEventListener('mousemove', move);
@@ -623,6 +636,7 @@
                 inputPanel.classList.contains('active') ? hidePanel() : showPanel();
             } else {
                 localStorage.setItem('cip_button_position_v4', JSON.stringify({ top: carrotButton.style.top, left: carrotButton.style.left }));
+                console.log('自定义QR插件：保存胡萝卜按钮位置');
             }
         };
         document.addEventListener('mousemove', move);
@@ -640,10 +654,18 @@
             carrotButton.style.position = 'fixed';
             carrotButton.style.top = savedPos.top;
             carrotButton.style.left = savedPos.left;
+            console.log(`自定义QR插件：加载胡萝卜按钮位置 (${savedPos.left}, ${savedPos.top})`);
+        } else {
+            // 默认位置
+            carrotButton.style.position = 'fixed';
+            carrotButton.style.top = '80px';
+            carrotButton.style.right = '20px';
+            console.log('自定义QR插件：未找到保存的位置，使用默认位置 (right: 20px, top: 80px)');
         }
     }
 
     function init() {
+        console.log('自定义QR插件：开始初始化');
         loadStickerData();
         loadFormats();
         renderCategories();
@@ -651,6 +673,12 @@
         loadButtonPosition();
         switchStickerCategory(Object.keys(stickerData)[0] || '');
         switchTab('text');
+        carrotButton.style.display = 'block'; // 确保胡萝卜按钮显示
+        console.log('自定义QR插件：初始化完成，胡萝卜按钮应可见');
     }
-    init();
+
+    // 延迟初始化以确保 DOM 加载完成
+    window.addEventListener('load', () => {
+        setTimeout(init, 1000); // 延迟 1 秒以确保 SillyTavern 的 DOM 加载
+    });
 })();
