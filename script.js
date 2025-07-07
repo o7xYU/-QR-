@@ -1,4 +1,4 @@
-// script.js (Custom QR Plugin v1.1 - Modified from original)
+// script.js (Custom QR Plugin v1.2 - Modified from original)
 (function () {
     if (document.getElementById('cip-carrot-button')) return;
 
@@ -16,13 +16,12 @@
     const STICKER_STORAGE_KEY = 'cip_sticker_data'; // Re-use old sticker key for compatibility
     const POS_STORAGE_KEY = 'cip_button_position_v5';
 
-    // 默认格式
+    // 默认格式 (移除了 "撤回")
     const defaultFormats = [
         { id: 'text', name: '文字信息', format: '“{content}”', type: 'textarea', placeholder: '在此输入文字...' },
         { id: 'voice', name: '语音', format: "={duration}'|{message}=", type: 'dual_input', placeholder: '输入语音识别出的内容...', placeholder2: '输入时长 (秒, 仅数字)' },
-        { id: 'bunny', name: '作弊模式', format: '({content})', type: 'textarea', placeholder: '在此输入想对BUNNY说的话...' },
-        { id: 'stickers', name: '表情包', format: '!{desc}|{url}!', type: 'sticker' },
-        { id: 'recall', name: '撤回', format: '--', type: 'instant' }
+        { id: 'bunny', name: '作弊模式', format: '({content})', type: 'textarea', placeholder: '在此输入想对AI说的话...' },
+        { id: 'stickers', name: '表情包', format: '!{desc}|{url}!', type: 'sticker' }
     ];
 
     // --- 1. 创建所有UI元素 ---
@@ -45,6 +44,7 @@
             <div id="cip-panel-footer">
                 <button id="cip-emoji-picker-btn">😊</button>
                 <div class="cip-footer-actions">
+                    <button id="cip-recall-button">撤回</button>
                     <button id="cip-insert-button">插 入</button>
                     <button id="cip-settings-button">⚙️</button>
                 </div>
@@ -335,6 +335,11 @@
             insertIntoSillyTavern(formattedText);
         }
     });
+
+    // 撤回按钮
+    get('cip-recall-button').addEventListener('click', () => {
+        insertIntoSillyTavern('--');
+    });
     
     // 表情包分类与添加
     get('cip-cancel-category-btn').addEventListener('click', () => toggleModal('cip-add-category-modal', false));
@@ -403,7 +408,8 @@
             const btnRect = emojiPickerBtn.getBoundingClientRect();
             let top = btnRect.top - 350 - 10;
             if (top < 10) top = btnRect.bottom + 10;
-            emojiPicker.style.top = `${top}px`; emojiPicker.style.left = `${left}px`;
+            emojiPicker.style.top = `${top}px`;
+            emojiPicker.style.left = `${left}px`;
             emojiPicker.style.display = 'block';
         }
     });
@@ -428,7 +434,8 @@
         if (top < 10) { top = btnRect.bottom + 10; }
         let left = btnRect.left + (btnRect.width / 2) - (inputPanel.offsetWidth / 2);
         left = Math.max(10, Math.min(left, window.innerWidth - inputPanel.offsetWidth - 10));
-        inputPanel.style.top = `${top}px`; inputPanel.style.left = `${left}px`;
+        inputPanel.style.top = `${top}px`;
+        inputPanel.style.left = `${left}px`;
         inputPanel.classList.add('active');
     }
     function hidePanel() { inputPanel.classList.remove('active'); }
