@@ -1,4 +1,4 @@
-# 兔子不吃胡萝卜 (Carrot Input Panel)
+# 定制化QR插件
 
 > 一款由 BunnY 制作的 SillyTavern 快捷输入扩展。
 
