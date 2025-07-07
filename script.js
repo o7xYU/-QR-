@@ -1,4 +1,4 @@
-// script.js (Custom QR Plugin v1.2 - Modified from original)
+// script.js (Custom QR Plugin v1.3 - Modified from original)
 (function () {
     if (document.getElementById('cip-carrot-button')) return;
 
@@ -12,6 +12,7 @@
     let formats = [];
     let currentTabId = null;
     let selectedSticker = null;
+    let lastFocusedInput = null; // FIX: 追踪最后一个获得焦点的输入框
     const FORMAT_STORAGE_KEY = 'cip_custom_formats_v2';
     const STICKER_STORAGE_KEY = 'cip_sticker_data'; // Re-use old sticker key for compatibility
     const POS_STORAGE_KEY = 'cip_button_position_v5';
@@ -389,17 +390,20 @@
     // Emoji Picker
     emojiPicker.addEventListener('emoji-click', event => {
         const emoji = event.detail.unicode;
-        const format = formats.find(f => f.id === currentTabId);
-        if(!format || format.type === 'sticker') return;
+        const target = lastFocusedInput; // FIX: 使用最后获得焦点的输入框
         
-        const target = get(`input-${format.id}`);
-        if (target) {
+        // FIX: 确保目标输入框存在并且在当前激活的标签页内
+        if (target && target.closest('.cip-content-section.active')) {
             const { selectionStart, selectionEnd, value } = target;
             target.value = value.substring(0, selectionStart) + emoji + value.substring(selectionEnd);
-            target.focus(); target.selectionEnd = selectionStart + emoji.length;
+            
+            const newCursorPos = selectionStart + emoji.length;
+            target.focus();
+            target.setSelectionRange(newCursorPos, newCursorPos);
         }
         emojiPicker.style.display = 'none';
     });
+    
     emojiPickerBtn.addEventListener('click', e => {
         e.stopPropagation();
         const isVisible = emojiPicker.style.display === 'block';
@@ -408,6 +412,7 @@
             const btnRect = emojiPickerBtn.getBoundingClientRect();
             let top = btnRect.top - 350 - 10;
             if (top < 10) top = btnRect.bottom + 10;
+            let left = btnRect.left; // Align with button
             emojiPicker.style.top = `${top}px`;
             emojiPicker.style.left = `${left}px`;
             emojiPicker.style.display = 'block';
@@ -498,6 +503,13 @@
         loadStickerData();
         loadButtonPosition();
         renderAll();
+
+        // FIX: 使用事件委托来追踪所有输入框的焦点
+        get('cip-panel-content').addEventListener('focusin', (e) => {
+            if (e.target.matches('.cip-input')) {
+                lastFocusedInput = e.target;
+            }
+        });
     }
     init();
 })();
