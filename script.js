@@ -1,188 +1,525 @@
-// script.js (v2.2 - 启动修复版)
+// script.js (v1.0 - 自定义QR插件)
 (function () {
-    if (document.getElementById('cip-carrot-button')) return;
+    // 防止插件重复加载
+    if (document.getElementById('cqr-main-button')) return;
 
-    // --- 0. 全局常量和状态 ---
-    const MODULES_KEY = 'cip_modules_config_v2';
-    const BTN_POS_KEY = 'cip_button_position_v4';
-    const STICKER_DATA_KEY = 'cip_sticker_data_v2';
+    const CQR_ID_PREFIX = 'cqr-';
+    const CQR_FORMATS_KEY = 'cqr_formats_v1';
+    const CQR_STICKERS_KEY = 'cqr_stickers_v1';
+    const CQR_BUTTON_POS_KEY = 'cqr_button_pos_v1';
 
-    let modules = []; let currentTabId = null; let stickerData = {};
-    let selectedSticker = null; let currentActiveSubOptionId = 'plain';
+    // --- 0. 默认配置 ---
+    // 定义默认的插入格式
+    const getDefaultFormats = () => ({
+        text: '“{content}”',
+        voice: "={duration}'|{message}=",
+        cheat_mode: "({content})",
+        stickers: "!{desc}|{url}!",
+        recall: '--'
+    });
 
-    // --- 1. 默认模块配置与数据处理 ---
-    function getDefaultModules(){return [{id:"text",name:"文字信息",type:"text",deletable:!1,subOptions:[{id:"plain",name:"纯文本",format:"“{content}”"},{id:"image",name:"图片",format:"“[{content}.jpg]”"},{id:"video",name:"视频",format:"“[{content}.mp4]”"},{id:"music",name:"音乐",format:"“[{content}.mp3]”"},{id:"post",name:"帖子",format:"“[{content}.link]”"}]},{id:"voice",name:"语音",type:"voice",deletable:!1,format:"={duration}'|{message}="},{id:"cheat_mode",name:"作弊模式",type:"simple",deletable:!0,format:"({content})"},{id:"stickers",name:"表情包",type:"stickers",deletable:!1,format:"!{desc}|{url}!"}]}
-    function loadModules(){const e=localStorage.getItem(MODULES_KEY);try{const t=JSON.parse(e);if(!Array.isArray(t)||0===t.length)throw new Error("Invalid modules data");modules=t}catch(t){modules=getDefaultModules(),saveModules()}currentTabId=modules[0]?.id}
-    function saveModules(){localStorage.setItem(MODULES_KEY,JSON.stringify(modules))}
-    function loadStickerData(){const e=localStorage.getItem(STICKER_DATA_KEY);e&&(stickerData=JSON.parse(e))}
-    function saveStickerData(){localStorage.setItem(STICKER_DATA_KEY,JSON.stringify(stickerData))}
-    function loadButtonPosition(){const e=JSON.parse(localStorage.getItem(BTN_POS_KEY));e?.top&&e?.left&&(getEl("cip-carrot-button").style.position="fixed",getEl("cip-carrot-button").style.top=e.top,getEl("cip-carrot-button").style.left=e.left)}
+    // --- 1. 动态加载外部库 ---
+    const pickerScript = document.createElement('script');
+    pickerScript.type = 'module';
+    pickerScript.src = 'https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js';
+    document.head.appendChild(pickerScript);
 
-    // --- 2. UI 创建 & 渲染 ---
-    function createUI(){const e=(e,t,o,i)=>{const n=document.createElement(e);return t&&(n.id=t),o&&(n.className=o),i&&(n.innerHTML=i),n},t=e("div","cip-carrot-button",null,"🥕"),o=e("div","cip-input-panel","cip-frosted-glass",'\n            <nav id="cip-panel-tabs"></nav>\n            <div id="cip-format-display"></div>\n            <div id="cip-panel-content"></div>\n            <div id="cip-panel-footer">\n                <div class="cip-footer-group">\n                    <div id="cip-emoji-picker-btn">😊</div>\n                    <div id="cip-manage-btn" title="管理模块">⚙️</div>\n                </div>\n                <div class="cip-footer-actions">\n                    <button id="cip-recall-button">撤回</button>\n                    <button id="cip-insert-button">插 入</button>\n                </div>\n            </div>'),i=e("emoji-picker","cip-emoji-picker","cip-frosted-glass"),n=e("div","cip-manage-modal","cip-modal-backdrop",'<div class="cip-modal-content cip-frosted-glass"><h3>模块管理</h3><div class="cip-modal-body"><ul id="cip-module-list"></ul></div><div class="cip-modal-footer"><button id="cip-add-module-btn" class="cip-modal-button cip-modal-button-primary">添加新模块</button><button id="cip-close-manage-btn" class="cip-modal-button cip-modal-button-secondary">关闭</button></div></div>'),c=e("div","cip-edit-modal","cip-modal-backdrop",'<div class="cip-modal-content cip-frosted-glass"><h3 id="cip-edit-modal-title"></h3><div class="cip-modal-body cip-edit-form"><div class="form-group"><label for="cip-edit-name">名称</label><input type="text" id="cip-edit-name" class="cip-edit-modal-input"></div><div class="form-group"><label for="cip-edit-type">类型</label><select id="cip-edit-type" class="cip-edit-modal-select"><option value="simple">简单文本</option><option value="voice">语音</option></select></div><div class="form-group"><label for="cip-edit-format">格式</label><input type="text" id="cip-edit-format" class="cip-edit-modal-input"><p class="cip-format-help">可用变量: {content}, {duration}, {message}</p></div></div><div class="cip-modal-footer"><button id="cip-cancel-edit-btn" class="cip-modal-button cip-modal-button-secondary">取消</button><button id="cip-save-edit-btn" class="cip-modal-button cip-modal-button-primary">保存</button></div></div>'),d=e("div","cip-add-stickers-modal","cip-modal-backdrop",'<div class="cip-modal-content cip-frosted-glass"><h3 id="cip-add-sticker-title"></h3><p>每行一个，格式为：<br><code>表情包描述:图片链接</code></p><textarea id="cip-new-stickers-input" placeholder="可爱猫猫:https://example.com/cat.png\n狗狗点头:https://example.com/dog.gif"></textarea><div class="cip-modal-actions"><button id="cip-cancel-stickers-btn" class="cip-modal-button cip-modal-button-secondary">取消</button><button id="cip-save-stickers-btn" class="cip-modal-button cip-modal-button-primary">保存</button></div></div>');return document.body.appendChild(t),document.body.appendChild(o),document.body.appendChild(i),document.body.appendChild(n),document.body.appendChild(c),document.body.appendChild(d),{carrotButton:t,inputPanel:o,emojiPicker:i,manageModal:n,editModal:c,addStickersModal:d}}
-    function renderApp(){const e=getEl("cip-panel-tabs"),t=getEl("cip-panel-content");e.innerHTML="",t.innerHTML="",modules.forEach(o=>{e.appendChild(createTabButton(o)),t.appendChild(createContentPanel(o))}),switchTab(currentTabId)}
-    function createTabButton(e){const t=document.createElement("button");return t.className="cip-tab-button",t.textContent=e.name,t.dataset.tabId=e.id,t}
-    function createContentPanel(e){const t=document.createElement("div");switch(t.id=`cip-${e.id}-content`,t.className="cip-content-section",e.type){case"text":const o=e.subOptions.map((e,t)=>`<button class="cip-sub-option-btn ${0===t?"active":""}" data-sub-id="${e.id}">${e.name}</button>`).join("");t.innerHTML=`<div class="cip-sub-options-container">${o}</div><textarea id="cip-main-input" class="cip-textarea"></textarea>`;break;case"voice":t.innerHTML='<input type="number" id="cip-voice-duration" placeholder="输入时长 (秒, 仅数字)"><textarea id="cip-voice-message" class="cip-textarea"></textarea>';break;case"simple":case"bunny":t.innerHTML=`<textarea id="cip-${e.id}-input" class="cip-textarea"></textarea>`;break;case"stickers":t.innerHTML='<div id="cip-sticker-categories" class="cip-sub-options-container"><button id="cip-add-category-btn" class="cip-sub-option-btn">+</button></div><div id="cip-sticker-grid"></div>'}return t}
+    // --- 2. 创建所有UI元素 ---
+    function createUI() {
+        const create = (tag, id, className, html) => {
+            const el = document.createElement(tag);
+            if (id) el.id = CQR_ID_PREFIX + id;
+            if (className) el.className = className.split(' ').map(c => CQR_ID_PREFIX + c).join(' ');
+            if (html) el.innerHTML = html;
+            return el;
+        };
 
-    // --- 3. 核心逻辑与事件监听 ---
-    function switchTab(e){modules.find(t=>t.id===e)||(e=modules[0]?.id),currentTabId=e;const t=modules.find(t=>t.id===e);t&&(queryAllEl(".cip-tab-button").forEach(t=>t.classList.toggle("active",t.dataset.tabId===e)),queryAllEl(".cip-content-section").forEach(t=>t.classList.toggle("active",t.id===`cip-${e}-content`)),"stickers"===e&&renderStickerCategories(),"text"===t.type&&(currentActiveSubOptionId=t.subOptions[0].id),updateFormatDisplay())}
-    function updateFormatDisplay(){const e=modules.find(e=>e.id===currentTabId);if(!e)return;let t="";switch(e.type){case"text":const o=e.subOptions.find(e=>e.id===currentActiveSubOptionId);t=o?o.format.replace("{content}","内容"):"";break;case"voice":t=e.format.replace("{duration}","数字").replace("{message}","内容");break;case"simple":case"bunny":t=e.format.replace("{content}","内容");break;case"stickers":t=e.format.replace("{desc}","描述").replace("{url}","链接");const i=getEl("cip-input-panel")?.querySelector(`.cip-sticker-category-btn[data-category="${currentStickerCategory}"]`);if(i){queryAllEl(".cip-category-action-icon").forEach(e=>e.remove());const t=document.createElement("i");t.textContent=" ➕",t.className="cip-category-action-icon",t.title="添加表情包",t.onclick=e=>{e.stopPropagation(),openAddStickersModal(currentStickerCategory)},i.appendChild(t);const o=document.createElement("i");o.textContent=" 🗑️",o.className="cip-category-action-icon cip-delete-category-btn",o.title="删除分类",o.onclick=e=>{e.stopPropagation(),confirm(`确定删除「${currentStickerCategory}」分类?`)&&(delete stickerData[currentStickerCategory],saveStickerData(),renderStickerCategories(),switchStickerCategory(Object.keys(stickerData)[0]||""))},i.appendChild(o)}}}getEl("cip-format-display").textContent=`格式: ${t}`}
-    function insertIntoSillyTavern(e){const t=document.querySelector("#send_textarea");t?(t.value+=(t.value.trim()?"\n":"")+e,t.dispatchEvent(new Event("input",{bubbles:!0})),t.focus()):alert("未能找到SillyTavern的输入框！")}
+        const mainButton = create('div', 'main-button', null, '🥕');
+        mainButton.title = '自定义QR插件';
+
+        const inputPanel = create('div', 'input-panel', 'frosted-glass', `
+            <nav id="${CQR_ID_PREFIX}panel-tabs">
+                <button class="cqr-tab-button active" data-tab="text">文字信息</button>
+                <button class="cqr-tab-button" data-tab="voice">语音</button>
+                <button class="cqr-tab-button" data-tab="cheat_mode">作弊模式</button>
+                <button class="cqr-tab-button" data-tab="stickers">表情包</button>
+            </nav>
+            <div id="${CQR_ID_PREFIX}panel-content">
+                <div id="${CQR_ID_PREFIX}text-content" class="cqr-content-section"><textarea id="${CQR_ID_PREFIX}text-input" placeholder="在此输入文字..."></textarea></div>
+                <div id="${CQR_ID_PREFIX}voice-content" class="cqr-content-section"><input type="number" id="${CQR_ID_PREFIX}voice-duration" placeholder="输入时长 (秒, 仅数字)"><textarea id="${CQR_ID_PREFIX}voice-message" placeholder="输入语音识别出的内容..."></textarea></div>
+                <div id="${CQR_ID_PREFIX}cheat_mode-content" class="cqr-content-section"><textarea id="${CQR_ID_PREFIX}cheat_mode-input" placeholder="在此输入想对AI说的话..."></textarea></div>
+                <div id="${CQR_ID_PREFIX}stickers-content" class="cqr-content-section"><div id="${CQR_ID_PREFIX}sticker-categories" class="cqr-sub-options-container"><button id="${CQR_ID_PREFIX}add-category-btn" class="cqr-sub-option-btn">+</button></div><div id="${CQR_ID_PREFIX}sticker-grid"></div></div>
+            </div>
+            <div id="${CQR_ID_PREFIX}panel-footer">
+                <div id="${CQR_ID_PREFIX}emoji-picker-btn">😊</div>
+                <div id="${CQR_ID_PREFIX}settings-btn">⚙️</div>
+                <div class="cqr-footer-actions">
+                    <button id="${CQR_ID_PREFIX}recall-button">撤回</button>
+                    <button id="${CQR_ID_PREFIX}insert-button">插 入</button>
+                </div>
+            </div>
+        `);
+
+        const emojiPicker = create('emoji-picker', 'emoji-picker', 'frosted-glass');
+
+        // 各种模态框
+        const addCategoryModal = create('div', 'add-category-modal', 'modal-backdrop hidden', `<div class="cqr-modal-content cqr-frosted-glass"><h3>添加新分类</h3><input type="text" id="${CQR_ID_PREFIX}new-category-name" placeholder="输入分类名称"><div class="cqr-modal-actions"><button id="${CQR_ID_PREFIX}cancel-category-btn">取消</button><button id="${CQR_ID_PREFIX}save-category-btn">保存</button></div></div>`);
+        const addStickersModal = create('div', 'add-stickers-modal', 'modal-backdrop hidden', `<div class="cqr-modal-content cqr-frosted-glass"><h3 id="${CQR_ID_PREFIX}add-sticker-title"></h3><p>每行一个，格式为：<code>表情包描述:图片链接</code></p><textarea id="${CQR_ID_PREFIX}new-stickers-input" placeholder="可爱猫猫:https://example.com/cat.png\n狗狗点头:https://example.com/dog.gif"></textarea><div class="cqr-modal-actions"><button id="${CQR_ID_PREFIX}cancel-stickers-btn">取消</button><button id="${CQR_ID_PREFIX}save-stickers-btn">保存</button></div></div>`);
+        const settingsModal = create('div', 'settings-modal', 'modal-backdrop hidden', `
+            <div class="cqr-modal-content cqr-frosted-glass">
+                <h3>⚙️ 格式设置</h3>
+                <div id="${CQR_ID_PREFIX}settings-help">
+                    使用 <code>{placeholder}</code> 作为占位符。<br>
+                    <strong>文字/作弊:</strong> <code>{content}</code><br>
+                    <strong>语音:</strong> <code>{duration}</code> 和 <code>{message}</code><br>
+                    <strong>表情包:</strong> <code>{desc}</code> 和 <code>{url}</code>
+                </div>
+                <form id="${CQR_ID_PREFIX}settings-form">
+                    <div class="cqr-settings-item"><label for="cqr-format-text">文字信息格式</label><input type="text" id="${CQR_ID_PREFIX}format-text"></div>
+                    <div class="cqr-settings-item"><label for="cqr-format-voice">语音格式</label><input type="text" id="${CQR_ID_PREFIX}format-voice"></div>
+                    <div class="cqr-settings-item"><label for="cqr-format-cheat_mode">作弊模式格式</label><input type="text" id="${CQR_ID_PREFIX}format-cheat_mode"></div>
+                    <div class="cqr-settings-item"><label for="cqr-format-stickers">表情包格式</label><input type="text" id="${CQR_ID_PREFIX}format-stickers"></div>
+                    <div class="cqr-settings-item"><label for="cqr-format-recall">撤回格式</label><input type="text" id="${CQR_ID_PREFIX}format-recall"></div>
+                </form>
+                <div class="cqr-modal-actions">
+                    <div class="left-actions"><button id="${CQR_ID_PREFIX}settings-restore-btn">恢复默认</button></div>
+                    <div><button id="${CQR_ID_PREFIX}settings-cancel-btn">取消</button><button id="${CQR_ID_PREFIX}settings-save-btn">保存</button></div>
+                </div>
+            </div>`);
+
+        return { mainButton, inputPanel, emojiPicker, addCategoryModal, addStickersModal, settingsModal };
+    }
+
+    // --- 3. 注入UI到页面 ---
+    const { mainButton, inputPanel, emojiPicker, addCategoryModal, addStickersModal, settingsModal } = createUI();
+    const anchor = document.querySelector('#chat-buttons-container, #send_form');
+    if (anchor) {
+        document.body.appendChild(mainButton);
+        document.body.appendChild(inputPanel);
+        document.body.appendChild(emojiPicker);
+        document.body.appendChild(addCategoryModal);
+        document.body.appendChild(addStickersModal);
+        document.body.appendChild(settingsModal);
+    } else {
+        console.error("自定义QR插件：未能找到SillyTavern的UI挂载点，插件无法加载。");
+        return;
+    }
+
+    // --- 4. 获取所有元素的引用 ---
+    const get = (id) => document.getElementById(CQR_ID_PREFIX + id);
+    const queryAll = (sel) => document.querySelectorAll(sel);
+
+    // --- 5. 核心状态与数据 ---
+    let currentTab = 'text', currentStickerCategory = '', selectedSticker = null;
+    let loadedFormats = {};
+    let stickerData = {};
+
+    // --- 6. 核心功能函数 ---
+    // 插入文本到SillyTavern输入框
+    function insertIntoSillyTavern(text) {
+        const textarea = document.querySelector("#send_textarea");
+        if (textarea) {
+            const currentVal = textarea.value;
+            const selectionStart = textarea.selectionStart;
+            const selectionEnd = textarea.selectionEnd;
+            const newText = currentVal.substring(0, selectionStart) + text + currentVal.substring(selectionEnd);
+            textarea.value = newText;
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+            textarea.focus();
+            textarea.selectionStart = textarea.selectionEnd = selectionStart + text.length;
+        } else {
+            alert("未能找到SillyTavern的输入框！");
+        }
+    }
+
+    // 加载/保存/恢复 格式配置
+    function loadFormats() {
+        const savedFormats = localStorage.getItem(CQR_FORMATS_KEY);
+        loadedFormats = savedFormats ? JSON.parse(savedFormats) : getDefaultFormats();
+    }
+    function saveFormats() {
+        localStorage.setItem(CQR_FORMATS_KEY, JSON.stringify(loadedFormats));
+    }
+    function restoreDefaultFormats() {
+        if (confirm("确定要将所有格式恢复为默认设置吗？")) {
+            loadedFormats = getDefaultFormats();
+            saveFormats();
+            openSettingsModal(); // 重新打开以显示新值
+        }
+    }
+
+    // 加载/保存 贴纸数据
+    function loadStickerData() {
+        const data = localStorage.getItem(CQR_STICKERS_KEY);
+        stickerData = data ? JSON.parse(data) : {};
+    }
+    function saveStickerData() {
+        localStorage.setItem(CQR_STICKERS_KEY, JSON.stringify(stickerData));
+    }
     
-    // Sticker and Modal logic
-    let currentStickerCategory="";function renderStickerCategories(){const e=getEl("cip-sticker-categories");if(!e)return;e.innerHTML='<button id="cip-add-category-btn" class="cip-sub-option-btn">+</button>',Object.keys(stickerData).forEach(t=>{const o=document.createElement("button");o.textContent=t,o.className="cip-sub-option-btn cip-sticker-category-btn",o.dataset.category=t,e.appendChild(o)}),switchStickerCategory(currentStickerCategory||Object.keys(stickerData)[0])}
-    function switchStickerCategory(e){currentStickerCategory=e||"";const t=getEl("cip-sticker-categories");t&&t.querySelectorAll(".cip-sticker-category-btn").forEach(t=>t.classList.toggle("active",t.dataset.category===e)),renderStickers(e),selectedSticker=null,updateFormatDisplay()}
-    function renderStickers(e){const t=getEl("cip-sticker-grid");if(!t)return;if(t.innerHTML="",!e||!stickerData[e])return void(t.innerHTML='<div class="cip-sticker-placeholder">请先选择或添加一个分类...</div>');const o=stickerData[e];if(0===o.length)return void(t.innerHTML='<div class="cip-sticker-placeholder">这个分类还没有表情包...</div>');o.forEach((e,o)=>{const i=document.createElement("div");i.className="cip-sticker-wrapper";const n=document.createElement("img");n.src=e.url,n.title=e.desc,n.className="cip-sticker-item",n.onclick=()=>{t.querySelector(".selected")?.classList.remove("selected"),n.classList.add("selected"),selectedSticker=e};const c=document.createElement("button");c.innerHTML="&times;",c.className="cip-delete-sticker-btn",c.title="删除这个表情包",c.onclick=t=>{t.stopPropagation(),confirm(`确定删除表情「${e.desc}」?`)&&(stickerData[currentStickerCategory].splice(o,1),saveStickerData(),renderStickers(currentStickerCategory))},i.appendChild(c),t.appendChild(n),t.appendChild(i)})}
-    function openAddStickerCategoryModal(){const e=prompt("请输入新的表情包分类名称：");e&&!stickerData[e]&&(stickerData[e]=[],saveStickerData(),renderStickerCategories(),switchStickerCategory(e))}
-    function openAddStickersModal(e){getEl("cip-add-sticker-title").textContent=`为「${e}」分类添加表情包`,getEl("cip-new-stickers-input").value="",getEl("cip-add-stickers-modal").dataset.currentCategory=e,getEl("cip-add-stickers-modal").classList.add("visible")}
+    // UI切换与渲染
+    function switchTab(tabId) {
+        currentTab = tabId;
+        queryAll(".cqr-tab-button").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tabId));
+        queryAll(".cqr-content-section").forEach(sec => sec.classList.toggle("active", sec.id === `${CQR_ID_PREFIX}${tabId}-content`));
+        if (tabId === 'stickers' && !currentStickerCategory) {
+            const firstCategory = Object.keys(stickerData)[0];
+            if (firstCategory) switchStickerCategory(firstCategory);
+        }
+    }
 
-    // --- 4. 事件委托与处理器 ---
-    function setupEventListeners() {
-        const get = getEl; // Local alias
-        const inputPanel = get('cip-input-panel');
+    function renderCategories() {
+        const container = get('sticker-categories');
+        // 清空旧分类，保留“+”按钮
+        container.querySelectorAll('.cqr-sticker-category-btn').forEach(btn => btn.remove());
+        
+        Object.keys(stickerData).forEach(name => {
+            const btn = document.createElement("button");
+            btn.className = "cqr-sub-option-btn cqr-sticker-category-btn";
+            btn.textContent = name;
+            btn.dataset.category = name;
+            btn.onclick = () => switchStickerCategory(name);
+            container.appendChild(btn);
+        });
+    }
+    
+    function switchStickerCategory(categoryName) {
+        currentStickerCategory = categoryName;
+        selectedSticker = null;
+        queryAll(".cqr-sticker-category-btn").forEach(btn => {
+            btn.classList.toggle("active", btn.dataset.category === categoryName);
+            // 清理旧的图标
+            const oldIcons = btn.querySelector('.cqr-category-action-container');
+            if(oldIcons) oldIcons.remove();
 
-        inputPanel.addEventListener('click', e => {
-            const target = e.target;
-            if (target.matches('.cip-tab-button')) { switchTab(target.dataset.tabId); }
-            if (target.matches('.cip-sub-option-btn') && target.closest('#cip-text-content')) {
-                target.parentElement.querySelector('.active')?.classList.remove('active');
-                target.classList.add('active');
-                currentActiveSubOptionId = target.dataset.subId;
-                updateFormatDisplay();
+            // 为激活的分类添加管理图标
+            if (btn.dataset.category === categoryName) {
+                const actionContainer = document.createElement('span');
+                actionContainer.className = 'cqr-category-action-container';
+
+                const addIcon = document.createElement("i");
+                addIcon.textContent = "➕";
+                addIcon.className = "cqr-category-action-icon";
+                addIcon.title = "向此分类添加表情包";
+                addIcon.onclick = e => { e.stopPropagation(); openAddStickersModal(categoryName); };
+                
+                const deleteIcon = document.createElement("i");
+                deleteIcon.textContent = "🗑️";
+                deleteIcon.className = "cqr-category-action-icon cqr-delete-category-btn";
+                deleteIcon.title = "删除此分类";
+                deleteIcon.onclick = e => {
+                    e.stopPropagation();
+                    if (confirm(`确定删除「${categoryName}」分类及其所有表情包?`)) {
+                        delete stickerData[categoryName];
+                        saveStickerData();
+                        renderCategories();
+                        // 切换到第一个可用分类或清空
+                        switchStickerCategory(Object.keys(stickerData)[0] || "");
+                    }
+                };
+                actionContainer.appendChild(addIcon);
+                actionContainer.appendChild(deleteIcon);
+                btn.appendChild(actionContainer);
             }
-            if (target.matches('#cip-add-category-btn')) { openAddStickerCategoryModal(); }
-            if (target.matches('.cip-sticker-category-btn')) { switchStickerCategory(target.dataset.category); }
-            if (target.matches('.cip-sticker-item')) {
-                get('cip-sticker-grid').querySelector('.selected')?.classList.remove('selected');
-                target.classList.add('selected');
-                const desc = target.title;
-                const category = get('cip-sticker-categories').querySelector('.active')?.dataset.category;
-                if (category) selectedSticker = stickerData[category]?.find(s => s.desc === desc);
-            }
-            if (target.matches('.cip-delete-sticker-btn')) {
-                const img = target.closest('.cip-sticker-wrapper').querySelector('img');
-                if(!img) return;
-                const desc = img.title;
-                const category = get('cip-sticker-categories').querySelector('.active')?.dataset.category;
-                if(confirm(`确定删除表情「${desc}」?`)) {
-                    const index = stickerData[category]?.findIndex(s => s.desc === desc);
-                    if (index > -1) { stickerData[category].splice(index, 1); saveStickerData(); renderStickers(category); }
+        });
+        renderStickers(categoryName);
+    }
+
+    function renderStickers(categoryName) {
+        const grid = get('sticker-grid');
+        grid.innerHTML = "";
+        if (!categoryName || !stickerData[categoryName]) {
+            grid.innerHTML = '<div class="cqr-sticker-placeholder">请先选择或添加一个分类...</div>';
+            return;
+        }
+        const stickers = stickerData[categoryName];
+        if (stickers.length === 0) {
+            grid.innerHTML = '<div class="cqr-sticker-placeholder">这个分类还没有表情包...</div>';
+            return;
+        }
+        stickers.forEach((sticker, index) => {
+            const wrapper = document.createElement("div");
+            wrapper.className = "cqr-sticker-wrapper";
+            const img = document.createElement("img");
+            img.src = sticker.url;
+            img.title = sticker.desc;
+            img.className = "cqr-sticker-item";
+            img.onclick = () => {
+                queryAll(".cqr-sticker-item.selected").forEach(el => el.classList.remove("selected"));
+                img.classList.add("selected");
+                selectedSticker = sticker;
+            };
+            const delBtn = document.createElement("button");
+            delBtn.innerHTML = "&times;";
+            delBtn.className = "cqr-delete-sticker-btn";
+            delBtn.title = "删除这个表情包";
+            delBtn.onclick = e => {
+                e.stopPropagation();
+                if (confirm(`确定删除表情「${sticker.desc}」?`)) {
+                    stickerData[currentStickerCategory].splice(index, 1);
+                    saveStickerData();
+                    renderStickers(currentStickerCategory);
                 }
-            }
-        });
-        
-        get('cip-recall-button').addEventListener('click', () => insertIntoSillyTavern('--'));
-        get('cip-manage-btn').addEventListener('click', () => get('cip-manage-modal').classList.add('visible'));
-        
-        get('cip-insert-button').addEventListener('click', () => {
-            const module = modules.find(m => m.id === currentTabId); if (!module) return;
-            let formattedText = '', inputToClear = null, durationInput = null;
-            switch(module.type) {
-                case 'text':
-                    const subOpt = module.subOptions.find(so => so.id === currentActiveSubOptionId);
-                    const mainInput = get('cip-main-input');
-                    if (mainInput.value.trim() && subOpt) { formattedText = subOpt.format.replace('{content}', mainInput.value); inputToClear = mainInput; } break;
-                case 'voice':
-                    durationInput = get('cip-voice-duration'); const messageInput = get('cip-voice-message');
-                    if (durationInput.value.trim() && messageInput.value.trim()) { formattedText = module.format.replace('{duration}', durationInput.value).replace('{message}', messageInput.value); inputToClear = messageInput; } break;
-                case 'simple': case 'bunny':
-                    const simpleInput = get(`cip-${module.id}-input`);
-                    if (simpleInput.value.trim()) { formattedText = module.format.replace('{content}', simpleInput.value); inputToClear = simpleInput; } break;
-                case 'stickers': if (selectedSticker) { formattedText = module.format.replace('{desc}', selectedSticker.desc).replace('{url}', selectedSticker.url); } break;
-            }
-            if (formattedText) { insertIntoSillyTavern(formattedText); if(inputToClear) inputToClear.value = ''; if(durationInput) durationInput.value = ''; }
-        });
-
-        // Modals
-        get('cip-manage-modal').addEventListener('click', e => {
-            const target = e.target.closest('button'); if(!target) return;
-            const id = target.dataset.id;
-            if (target.matches('.cip-edit-btn')) openEditModal(id);
-            if (target.matches('.cip-delete-btn')) {
-                if (confirm('你确定要删除这个模块吗?')) {
-                    modules = modules.filter(m => m.id !== id);
-                    if (currentTabId === id) currentTabId = modules[0]?.id;
-                    saveModules(); renderApp(); openManageModal();
-                }
-            }
-            if (target.matches('#cip-add-module-btn')) openEditModal();
-            if (target.matches('#cip-close-manage-btn')) get('cip-manage-modal').classList.remove('visible');
-        });
-        get('cip-edit-modal').addEventListener('click', e => {
-            if (e.target.matches('#cip-cancel-edit-btn')) get('cip-edit-modal').classList.remove('visible');
-            if (e.target.matches('#cip-save-edit-btn')) {
-                const id = e.currentTarget.querySelector('#cip-save-edit-btn').dataset.editingId, name = get('cip-edit-name').value.trim(), type = get('cip-edit-type').value, format = get('cip-edit-format').value.trim();
-                if (!name || !format) return alert('名称和格式不能为空！');
-                if (id) { const module = modules.find(m => m.id === id); if (module) { module.name = name; if (module.format !== undefined) module.format = format; } }
-                else { modules.push({ id: `custom_${Date.now()}`, name, type, format, deletable: true }); }
-                saveModules(); renderApp(); get('cip-edit-modal').classList.remove('visible');
-            }
-        });
-        get('cip-add-stickers-modal').addEventListener('click', e => {
-            if (e.target.matches('#cip-cancel-stickers-btn')) get('cip-add-stickers-modal').classList.remove('visible');
-            if (e.target.matches('#cip-save-stickers-btn')) {
-                const category = get('cip-add-stickers-modal').dataset.currentCategory;
-                const text = get('cip-new-stickers-input').value.trim();
-                if (!category || !text || !stickerData[category]) return; let addedCount = 0;
-                text.split('\n').forEach(line => {
-                    const parts = line.split(':');
-                    if (parts.length >= 2) { const desc = parts[0].trim(), url = parts.slice(1).join(':').trim(); if (desc && url) { stickerData[category].push({ desc, url }); addedCount++; } }
-                });
-                if (addedCount > 0) { saveStickerData(); if (currentStickerCategory === category) renderStickers(category); get('cip-add-stickers-modal').classList.remove('visible'); }
-                else { alert('未能解析任何有效的表情包信息。'); }
-            }
-        });
-        
-        // Drag, Click, Emoji Handlers
-        function openManageModal(){const t=getEl("cip-module-list");t.innerHTML="",modules.forEach(e=>{const o=document.createElement("li");o.className="cip-module-item",o.innerHTML=`<span class="cip-module-item-name">${e.name}</span><div class="cip-module-item-actions"><button class="cip-edit-btn" data-id="${e.id}" title="编辑">✏️</button>${e.deletable?`<button class="cip-delete-btn" data-id="${e.id}" title="删除">🗑️</button>`:""}</div>`,t.appendChild(o)})}
-        function openEditModal(t=null){const e=modules.find(e=>e.id===t),o=getEl("cip-edit-modal-title"),i=getEl("cip-edit-name"),d=getEl("cip-edit-type"),l=getEl("cip-edit-format"),n=getEl("cip-save-edit-btn");e?(o.textContent=`编辑模块: ${e.name}`,i.value=e.name,d.value=e.type,d.disabled=!0,l.value=e.format||"",n.dataset.editingId=t):(o.textContent="添加新模块",i.value="",d.value="simple",d.disabled=!1,l.value="({content})",delete n.dataset.editingId),getEl("cip-manage-modal").classList.remove("visible"),getEl("cip-edit-modal").classList.add("visible")}
-        const emojiPicker = get('cip-emoji-picker');
-        get('cip-emoji-picker-btn').addEventListener('click',e=>{e.stopPropagation();const t=emojiPicker.style.display==="block";if(t)emojiPicker.style.display="none";else{const t=e.currentTarget.getBoundingClientRect();let o=t.top-350-10;o<10&&(o=t.bottom+10),emojiPicker.style.top=`${o}px`,emojiPicker.style.left=`${t.left}px`,emojiPicker.style.display="block"}});
-        emojiPicker.addEventListener('emoji-click', event => { const emoji = event.detail.unicode; const module = modules.find(m => m.id === currentTabId); if (!module) return; let target; switch(module.type) { case 'text': target = getEl('cip-main-input'); break; case 'voice': target = getEl('cip-voice-message'); break; case 'simple': case 'bunny': target = getEl(`cip-${module.id}-input`); break; } if (target) { const { selectionStart, selectionEnd, value } = target; target.value = value.substring(0, selectionStart) + emoji + value.substring(selectionEnd); target.focus(); target.selectionEnd = selectionStart + emoji.length; } emojiPicker.style.display = 'none'; });
-        
-        const carrotButton = get('cip-carrot-button');
-        const mainPanel = get('cip-input-panel');
-        function hidePanel() { mainPanel.classList.remove('active'); }
-        function showPanel() { const btnRect = carrotButton.getBoundingClientRect(); const panelHeight = mainPanel.offsetHeight || 380; let top = btnRect.top - panelHeight - 10; if (top < 10) { top = btnRect.bottom + 10; } let left = btnRect.left + (btnRect.width / 2) - (mainPanel.offsetWidth / 2); left = Math.max(10, Math.min(left, window.innerWidth - mainPanel.offsetWidth - 10)); mainPanel.style.top = `${top}px`; mainPanel.style.left = `${left}px`; mainPanel.classList.add('active'); }
-        
-        function dragHandler(e){let t=!0;"touchstart"===e.type&&e.preventDefault();const o=carrotButton.getBoundingClientRect(),i="mouse"===e.type.substring(0,5)?e.clientX:e.touches[0].clientX,d="mouse"===e.type.substring(0,5)?e.clientY:e.touches[0].clientY,l=i-o.left,n=d-o.top;const c=e=>{t=!1,carrotButton.classList.add("is-dragging");let o="mouse"===e.type.substring(0,5)?e.clientX:e.touches[0].clientX,i="mouse"===e.type.substring(0,5)?e.clientY:e.touches[0].clientY,d=o-l,s=i-n;d=Math.max(0,Math.min(d,window.innerWidth-carrotButton.offsetWidth)),s=Math.max(0,Math.min(s,window.innerHeight-carrotButton.offsetHeight)),carrotButton.style.position="fixed",carrotButton.style.left=`${d}px`,carrotButton.style.top=`${s}px`},s=()=>{document.removeEventListener("mousemove",c),document.removeEventListener("mouseup",s),document.removeEventListener("touchmove",c),document.removeEventListener("touchend",s),carrotButton.classList.remove("is-dragging"),t?mainPanel.classList.contains("active")?hidePanel():showPanel():localStorage.setItem(BTN_POS_KEY,JSON.stringify({top:carrotButton.style.top,left:carrotButton.style.left}))};document.addEventListener("mousemove",c),document.addEventListener("mouseup",s),document.addEventListener("touchmove",c,{passive:!1}),document.addEventListener("touchend",s)}
-        carrotButton.addEventListener('mousedown', dragHandler);
-        carrotButton.addEventListener('touchstart', dragHandler, { passive: false });
-        
-        document.addEventListener('click', e => {
-            if (mainPanel.classList.contains('active') && !mainPanel.contains(e.target) && !carrotButton.contains(e.target)) hidePanel();
-            if (emojiPicker.style.display === 'block' && !emojiPicker.contains(e.target) && !getEl('cip-emoji-picker-btn').contains(e.target)) { emojiPicker.style.display = 'none'; }
-            if (getEl('cip-manage-modal').classList.contains('visible') && !getEl('cip-manage-modal').querySelector('.cip-modal-content').contains(e.target)) getEl('cip-manage-modal').classList.remove('visible');
-            if (getEl('cip-edit-modal').classList.contains('visible') && !getEl('cip-edit-modal').querySelector('.cip-modal-content').contains(e.target)) getEl('cip-edit-modal').classList.remove('visible');
-            if (getEl('cip-add-stickers-modal').classList.contains('visible') && !getEl('cip-add-stickers-modal').querySelector('.cip-modal-content').contains(e.target)) getEl('cip-add-stickers-modal').classList.remove('visible');
+            };
+            wrapper.appendChild(img);
+            wrapper.appendChild(delBtn);
+            grid.appendChild(wrapper);
         });
     }
 
-    // --- 5. 初始化 ---
-    function init() {
-        const pickerScript = document.createElement('script');
-        pickerScript.type = 'module';
-        pickerScript.src = 'https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js';
-        document.head.appendChild(pickerScript);
+    // 模态框控制
+    function toggleModal(modalId, show) {
+        get(modalId).classList.toggle("hidden", !show);
+    }
+
+    function openAddStickersModal(category) {
+        get('add-sticker-title').textContent = `为「${category}」分类添加表情包`;
+        get('new-stickers-input').value = "";
+        addStickersModal.dataset.currentCategory = category;
+        toggleModal("add-stickers-modal", true);
+        get('new-stickers-input').focus();
+    }
+    
+    function openSettingsModal() {
+        // 将当前加载的格式填充到输入框
+        get('format-text').value = loadedFormats.text;
+        get('format-voice').value = loadedFormats.voice;
+        get('format-cheat_mode').value = loadedFormats.cheat_mode;
+        get('format-stickers').value = loadedFormats.stickers;
+        get('format-recall').value = loadedFormats.recall;
+        toggleModal('settings-modal', true);
+    }
+
+    // --- 7. 事件监听器 ---
+    function setupEventListeners() {
+        // 主面板交互
+        queryAll('.cqr-tab-button').forEach(btn => btn.addEventListener('click', e => switchTab(e.currentTarget.dataset.tab)));
         
-        loadModules();
-        createUI();
+        get('recall-button').addEventListener('click', () => insertIntoSillyTavern(loadedFormats.recall));
+
+        get('insert-button').addEventListener('click', () => {
+            let formattedText = '';
+            let inputsToClear = [];
+
+            switch (currentTab) {
+                case 'text':
+                    const textInput = get('text-input');
+                    if (textInput.value.trim()) {
+                        formattedText = loadedFormats.text.replace('{content}', textInput.value);
+                        inputsToClear.push(textInput);
+                    }
+                    break;
+                case 'voice':
+                    const duration = get('voice-duration'), message = get('voice-message');
+                    if (duration.value.trim() && message.value.trim()) {
+                        formattedText = loadedFormats.voice
+                            .replace('{duration}', duration.value)
+                            .replace('{message}', message.value);
+                        inputsToClear.push(duration, message);
+                    }
+                    break;
+                case 'cheat_mode':
+                    const cheatInput = get('cheat-mode-input');
+                    if (cheatInput.value.trim()) {
+                        formattedText = loadedFormats.cheat_mode.replace('{content}', cheatInput.value);
+                        inputsToClear.push(cheatInput);
+                    }
+                    break;
+                case 'stickers':
+                    if (selectedSticker) {
+                        formattedText = loadedFormats.stickers
+                            .replace('{desc}', selectedSticker.desc)
+                            .replace('{url}', selectedSticker.url);
+                    }
+                    break;
+            }
+            
+            if (formattedText) {
+                insertIntoSillyTavern(formattedText);
+                inputsToClear.forEach(input => input.value = '');
+            }
+        });
+
+        // 表情包分类与添加
+        get('add-category-btn').addEventListener('click', () => { get('new-category-name').value = ''; toggleModal('add-category-modal', true); get('new-category-name').focus(); });
+        get('cancel-category-btn').addEventListener('click', () => toggleModal('add-category-modal', false));
+        get('save-category-btn').addEventListener('click', () => {
+            const name = get('new-category-name').value.trim();
+            if (name && !stickerData[name]) {
+                stickerData[name] = [];
+                saveStickerData();
+                renderCategories();
+                switchStickerCategory(name);
+                toggleModal('add-category-modal', false);
+            } else if (stickerData[name]) {
+                alert('该分类已存在！');
+            } else {
+                alert('请输入有效的分类名称！');
+            }
+        });
+
+        get('cancel-stickers-btn').addEventListener('click', () => toggleModal('add-stickers-modal', false));
+        get('save-stickers-btn').addEventListener('click', () => {
+            const category = addStickersModal.dataset.currentCategory;
+            const text = get('new-stickers-input').value.trim();
+            if (!category || !text) return;
+            let addedCount = 0;
+            text.split('\n').forEach(line => {
+                const parts = line.split(':');
+                if (parts.length >= 2) {
+                    const desc = parts[0].trim();
+                    const url = parts.slice(1).join(':').trim();
+                    if (desc && url) {
+                        stickerData[category].push({ desc, url });
+                        addedCount++;
+                    }
+                }
+            });
+            if (addedCount > 0) {
+                saveStickerData();
+                if (currentStickerCategory === category) renderStickers(category);
+                toggleModal('add-stickers-modal', false);
+            } else {
+                alert('未能解析任何有效的表情包信息。');
+            }
+        });
+
+        // Emoji Picker
+        get('emoji-picker-btn').addEventListener('click', e => {
+            e.stopPropagation();
+            const isVisible = emojiPicker.style.display === 'block';
+            if (isVisible) {
+                emojiPicker.style.display = 'none';
+            } else {
+                const btnRect = get('emoji-picker-btn').getBoundingClientRect();
+                emojiPicker.style.top = `${btnRect.top - 350 - 10}px`;
+                emojiPicker.style.left = `${btnRect.left - 150}px`;
+                emojiPicker.style.display = 'block';
+            }
+        });
+        emojiPicker.addEventListener('emoji-click', event => {
+            const emoji = event.detail.unicode;
+            let target;
+            if (currentTab === 'text') target = get('text-input');
+            else if (currentTab === 'voice') target = get('voice-message');
+            else if (currentTab === 'cheat_mode') target = get('cheat-mode-input');
+            
+            if (target) {
+                const { selectionStart, selectionEnd, value } = target;
+                target.value = value.substring(0, selectionStart) + emoji + value.substring(selectionEnd);
+                target.focus();
+                target.selectionEnd = selectionStart + emoji.length;
+            }
+            emojiPicker.style.display = 'none';
+        });
+
+        // 设置面板
+        get('settings-btn').addEventListener('click', openSettingsModal);
+        get('settings-cancel-btn').addEventListener('click', () => toggleModal('settings-modal', false));
+        get('settings-restore-btn').addEventListener('click', restoreDefaultFormats);
+        get('settings-save-btn').addEventListener('click', () => {
+            loadedFormats.text = get('format-text').value;
+            loadedFormats.voice = get('format-voice').value;
+            loadedFormats.cheat_mode = get('format-cheat_mode').value;
+            loadedFormats.stickers = get('format-stickers').value;
+            loadedFormats.recall = get('format-recall').value;
+            saveFormats();
+            toggleModal('settings-modal', false);
+            alert('设置已保存！');
+        });
+
+        // 按钮拖拽与面板显隐
+        function dragHandler(e) {
+            let isClick = true;
+            if (e.type === 'touchstart') e.preventDefault();
+            const rect = mainButton.getBoundingClientRect();
+            const offsetX = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - rect.left;
+            const offsetY = (e.type.includes('mouse') ? e.clientY : e.touches[0].clientY) - rect.top;
+
+            const move = (e) => {
+                isClick = false;
+                mainButton.classList.add('is-dragging');
+                let newLeft = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - offsetX;
+                let newTop = (e.type.includes('mouse') ? e.clientY : e.touches[0].clientY) - offsetY;
+                newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - mainButton.offsetWidth));
+                newTop = Math.max(0, Math.min(newTop, window.innerHeight - mainButton.offsetHeight));
+                mainButton.style.position = 'fixed';
+                mainButton.style.left = `${newLeft}px`;
+                mainButton.style.top = `${newTop}px`;
+            };
+
+            const end = () => {
+                document.removeEventListener('mousemove', move);
+                document.removeEventListener('mouseup', end);
+                document.removeEventListener('touchmove', move);
+                document.removeEventListener('touchend', end);
+                mainButton.classList.remove('is-dragging');
+                if (isClick) {
+                    inputPanel.classList.contains('active') ? hidePanel() : showPanel();
+                } else {
+                    localStorage.setItem(CQR_BUTTON_POS_KEY, JSON.stringify({ top: mainButton.style.top, left: mainButton.style.left }));
+                }
+            };
+            document.addEventListener('mousemove', move);
+            document.addEventListener('mouseup', end);
+            document.addEventListener('touchmove', move, { passive: false });
+            document.addEventListener('touchend', end);
+        }
+        mainButton.addEventListener('mousedown', dragHandler);
+        mainButton.addEventListener('touchstart', dragHandler, { passive: false });
+
+        // 点击外部关闭面板
+        document.addEventListener('click', (e) => {
+            if (inputPanel.classList.contains('active') && !inputPanel.contains(e.target) && !mainButton.contains(e.target)) {
+                hidePanel();
+            }
+            if (emojiPicker.style.display === 'block' && !emojiPicker.contains(e.target) && !get('emoji-picker-btn').contains(e.target)) {
+                emojiPicker.style.display = 'none';
+            }
+        });
+    }
+
+    // --- 8. 辅助与初始化 ---
+    function showPanel() {
+        const btnRect = mainButton.getBoundingClientRect();
+        const panelHeight = inputPanel.offsetHeight || 420;
+        const panelWidth = inputPanel.offsetWidth || 380;
+        let top = btnRect.top - panelHeight - 10;
+        if (top < 10) top = btnRect.bottom + 10;
+        let left = btnRect.left + (btnRect.width / 2) - (panelWidth / 2);
+        left = Math.max(10, Math.min(left, window.innerWidth - panelWidth - 10));
+        inputPanel.style.top = `${top}px`;
+        inputPanel.style.left = `${left}px`;
+        inputPanel.classList.add('active');
+    }
+    function hidePanel() {
+        inputPanel.classList.remove('active');
+    }
+
+    function loadButtonPosition() {
+        const savedPos = JSON.parse(localStorage.getItem(CQR_BUTTON_POS_KEY));
+        if (savedPos?.top && savedPos?.left) {
+            mainButton.style.position = 'fixed';
+            mainButton.style.top = savedPos.top;
+            mainButton.style.left = savedPos.left;
+        }
+    }
+
+    function init() {
+        loadFormats();
         loadStickerData();
         loadButtonPosition();
-        renderApp();
-        setupEventListeners(); // 绑定所有事件
+        setupEventListeners();
+        renderCategories();
+        // 默认选择第一个分类（如果存在）
+        const firstCategory = Object.keys(stickerData)[0];
+        if (firstCategory) {
+            switchStickerCategory(firstCategory);
+        }
+        // 默认打开文字标签页
+        switchTab('text');
     }
 
-    const getEl = (id) => document.getElementById(id);
-    const queryAllEl = (sel) => document.querySelectorAll(sel);
-    
-    // 使用轮询来确保SillyTavern的UI已准备就绪
-    const int = setInterval(() => {
-        const anchor = document.querySelector('#chat-buttons-container, #send_form');
-        if (anchor) {
-            clearInterval(int);
-            init();
-        }
-    }, 100);
-
+    // 启动插件
+    init();
 })();
