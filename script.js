@@ -1,4 +1,4 @@
-// script.js (Custom QR Plugin v1.0 - Modified from original)
+// script.js (Custom QR Plugin v1.1 - Modified from original)
 (function () {
     if (document.getElementById('cip-carrot-button')) return;
 
@@ -99,7 +99,7 @@
     function saveStickerData(){ localStorage.setItem(STICKER_STORAGE_KEY, JSON.stringify(stickerData)); }
     function loadStickerData(){
         const t = localStorage.getItem(STICKER_STORAGE_KEY);
-        stickerData = t ? JSON.parse(t) : {};
+        stickerData = t ? JSON.parse(t) : { '默认': [] };
     }
 
     // --- 5. 动态渲染核心 ---
@@ -108,7 +108,16 @@
         renderContentPanels();
         const firstTab = formats.find(f => f.type !== 'instant');
         if (firstTab) {
-            switchTab(currentTabId || firstTab.id);
+            // If currentTabId is invalid, reset to the first available tab
+            if (!formats.some(f => f.id === currentTabId)) {
+                currentTabId = firstTab.id;
+            }
+            switchTab(currentTabId);
+        } else {
+            // No tabs available
+            currentTabId = null;
+            get('cip-panel-content').innerHTML = '';
+            updateFormatDisplay();
         }
     }
 
@@ -150,7 +159,6 @@
                     section.innerHTML = `
                         <div id="cip-sticker-categories" class="cip-sub-options-container"></div>
                         <div id="cip-sticker-grid"></div>`;
-                    // Sticker UI is rendered in switchTab
                     break;
             }
             contentContainer.appendChild(section);
@@ -164,9 +172,9 @@
         queryAll('.cip-content-section').forEach(s => s.classList.toggle('active', s.id === `content-${id}`));
         
         const format = formats.find(f => f.id === id);
-        if (format.type === 'sticker') {
+        if (format && format.type === 'sticker') {
             renderStickerCategories();
-            const firstCategory = Object.keys(stickerData)[0] || null;
+            const firstCategory = Object.keys(stickerData).find(k => k !== 'currentCategory') || null;
             switchStickerCategory(stickerData.currentCategory || firstCategory);
         }
         updateFormatDisplay();
@@ -176,15 +184,28 @@
         const format = formats.find(f => f.id === currentTabId);
         if (format) {
             formatDisplay.textContent = `格式: ${format.format.replace('{content}', '内容').replace('{message}', '内容')}`;
+        } else {
+            formatDisplay.textContent = '';
         }
     }
 
     // --- 6. 表情包逻辑 (从原文件复用并适配) ---
     let currentStickerCategory = '';
     function switchStickerCategory(category){
+        if (!category) {
+            const firstCat = Object.keys(stickerData).find(k => k !== 'currentCategory');
+            if (firstCat) category = firstCat;
+            else { // No categories exist
+                renderStickerCategories(); // Render the add button
+                const stickerGrid = get('cip-sticker-grid');
+                if(stickerGrid) stickerGrid.innerHTML='<div class="cip-sticker-placeholder">请先添加一个分类...</div>';
+                return;
+            }
+        }
         currentStickerCategory = category;
         if(stickerData) stickerData.currentCategory = category; // Save current category
-        queryAll("#cip-sticker-categories .cip-sub-option-btn").forEach(e => e.classList.toggle("active", e.dataset.category === category));
+        
+        renderStickerCategories(); // Re-render to show active state and icons
         renderStickers(category);
         selectedSticker=null;
     }
@@ -210,8 +231,45 @@
         container.innerHTML = '';
         Object.keys(stickerData).filter(k => k !== 'currentCategory').forEach(name=>{
             const btn=document.createElement("button");
-            btn.textContent=name; btn.className="cip-sub-option-btn"; btn.dataset.category=name;
-            btn.onclick=()=>switchStickerCategory(name); container.appendChild(btn);
+            const btnText = document.createElement('span');
+            btnText.textContent = name;
+            btn.appendChild(btnText);
+
+            btn.className="cip-sub-option-btn"; btn.dataset.category=name;
+            btn.onclick=()=>switchStickerCategory(name); 
+
+            if (name === currentStickerCategory) {
+                btn.classList.add('active');
+                
+                const addStickerBtn = document.createElement('i');
+                addStickerBtn.textContent = ' ➕';
+                addStickerBtn.className = 'cip-category-action-icon';
+                addStickerBtn.title = '向此分类添加表情包';
+                addStickerBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    get('cip-add-sticker-title').textContent = `为「${currentStickerCategory}」分类添加表情包`;
+                    get('cip-new-stickers-input').value = "";
+                    toggleModal('cip-add-stickers-modal', true);
+                    get('cip-new-stickers-input').focus();
+                };
+                btn.appendChild(addStickerBtn);
+
+                const deleteCategoryBtn = document.createElement('i');
+                deleteCategoryBtn.textContent = ' 🗑️';
+                deleteCategoryBtn.className = 'cip-category-action-icon cip-delete-category-btn';
+                deleteCategoryBtn.title = '删除此分类';
+                deleteCategoryBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (confirm(`确定删除「${currentStickerCategory}」分类及其所有表情包吗?`)) {
+                        delete stickerData[currentStickerCategory];
+                        stickerData.currentCategory = null; // Reset current category
+                        saveStickerData();
+                        switchStickerCategory(null); // Switch to first available or show empty state
+                    }
+                };
+                btn.appendChild(deleteCategoryBtn);
+            }
+            container.appendChild(btn);
         });
         const addBtn = document.createElement('button');
         addBtn.id = 'cip-add-category-btn'; addBtn.className = 'cip-sub-option-btn'; addBtn.textContent = '+';
@@ -282,7 +340,7 @@
     get('cip-cancel-category-btn').addEventListener('click', () => toggleModal('cip-add-category-modal', false));
     get('cip-save-category-btn').addEventListener('click', () => {
         const name = get('cip-new-category-name').value.trim();
-        if (name && !stickerData[name]) { stickerData[name] = []; saveStickerData(); renderStickerCategories(); switchStickerCategory(name); toggleModal('cip-add-category-modal', false); }
+        if (name && !stickerData[name]) { stickerData[name] = []; saveStickerData(); switchStickerCategory(name); toggleModal('cip-add-category-modal', false); }
         else if (stickerData[name]) alert('该分类已存在！'); else alert('请输入有效的分类名称！');
     });
     get('cip-cancel-stickers-btn').addEventListener('click', () => toggleModal('cip-add-stickers-modal', false));
@@ -296,14 +354,6 @@
         saveStickerData();
         renderStickers(currentStickerCategory);
         toggleModal('cip-add-stickers-modal', false);
-    });
-    document.body.addEventListener('click', e => { // Delegate sticker add button
-        if(e.target.matches('.cip-add-sticker-to-category')) {
-            get('cip-add-sticker-title').textContent = `为「${currentStickerCategory}」分类添加表情包`;
-            get('cip-new-stickers-input').value = "";
-            toggleModal('cip-add-stickers-modal', true);
-            get('cip-new-stickers-input').focus();
-        }
     });
 
     // 设置面板事件
@@ -353,7 +403,7 @@
             const btnRect = emojiPickerBtn.getBoundingClientRect();
             let top = btnRect.top - 350 - 10;
             if (top < 10) top = btnRect.bottom + 10;
-            emojiPicker.style.top = `${top}px`; emojiPicker.style.left = `${btnRect.left}px`;
+            emojiPicker.style.top = `${top}px`; emojiPicker.style.left = `${left}px`;
             emojiPicker.style.display = 'block';
         }
     });
