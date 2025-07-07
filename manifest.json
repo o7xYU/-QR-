@@ -1,9 +1,9 @@
 {
-  "name": "Editable-QR-input",
-  "display_name": "定制化快捷输入插件",
-  "version": "1.0/由BunnY制作",
-  "manifest_version": 1,
-  "description": "一个完全可定制的、提供多种格式化输入选项的浮动面板，由一个可拖拽的胡萝卜按钮触发。",
+  "name": "custom-qr-plugin",
+  "display_name": "自定义QR插件",
+  "version": "1.0",
+  "manifest_version": 2,
+  "description": "一个完全可自定义的快捷输入面板。您可以自由编辑每个功能块的插入格式。",
   "js": ["script.js"],
   "css": ["style.css"]
 }
