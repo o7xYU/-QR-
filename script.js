@@ -1,7 +1,9 @@
-// script.js (v2.1 - 静默启动)
+// script.js (v2.2 - Bugfix: 静默启动修复)
 (function () {
+    // 防止插件重复加载
     if (document.getElementById('cqr-main-button')) return;
 
+    // --- 全局常量 ---
     const CQR_ID_PREFIX = 'cqr-';
     const CQR_TYPES_KEY = 'cqr_types_v2';
     const CQR_STICKERS_KEY = 'cqr_stickers_v1';
@@ -22,7 +24,7 @@
     pickerScript.src = 'https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js';
     document.head.appendChild(pickerScript);
 
-    // --- 2. 创建基础UI框架 ---
+    // --- 2. 创建所有UI元素 ---
     function createUI() {
         const create = (tag, id, className, html) => {
             const el = document.createElement(tag);
@@ -89,13 +91,16 @@
         return;
     }
 
-    // --- 4. 核心状态与数据 ---
+    // --- 4. 获取元素引用 ---
+    const get = (id) => document.getElementById(CQR_ID_PREFIX + id);
+
+    // --- 5. 核心状态与数据 ---
     let currentTypeId = null;
     let loadedTypes = [];
     let stickerData = {};
     let currentStickerCategory = '', selectedSticker = null;
 
-    // --- 5. 核心功能函数 ---
+    // --- 6. 核心功能函数 ---
     function insertText(text) {
         const textarea = document.querySelector("#send_textarea");
         if (!textarea) return;
@@ -115,26 +120,28 @@
             textarea.dispatchEvent(new Event("input", { bubbles: true }));
             sendButton.click();
         } else {
-            alert("未能找到输入框或发送按钮！");
+            console.error("自定义QR插件：未能找到输入框或发送按钮！");
         }
     }
 
-    function loadTypes() {
-        const saved = localStorage.getItem(CQR_TYPES_KEY);
-        loadedTypes = saved ? JSON.parse(saved) : getDefaultTypes();
-    }
-    function saveTypes() {
-        localStorage.setItem(CQR_TYPES_KEY, JSON.stringify(loadedTypes));
-    }
-    function loadStickerData() {
-        const data = localStorage.getItem(CQR_STICKERS_KEY);
-        stickerData = data ? JSON.parse(data) : {};
-    }
-    function saveStickerData() {
-        localStorage.setItem(CQR_STICKERS_KEY, JSON.stringify(stickerData));
+    function loadData() {
+        const savedTypes = localStorage.getItem(CQR_TYPES_KEY);
+        loadedTypes = savedTypes ? JSON.parse(savedTypes) : getDefaultTypes();
+        const savedStickers = localStorage.getItem(CQR_STICKERS_KEY);
+        stickerData = savedStickers ? JSON.parse(savedStickers) : {};
+        const savedPos = JSON.parse(localStorage.getItem(CQR_BUTTON_POS_KEY));
+        if (savedPos?.top && savedPos?.left) {
+            mainButton.style.position = 'fixed';
+            mainButton.style.top = savedPos.top;
+            mainButton.style.left = savedPos.left;
+        }
     }
 
-    // --- 6. 动态UI渲染 ---
+    function saveData(key, data) {
+        localStorage.setItem(key, JSON.stringify(data));
+    }
+
+    // --- 7. 动态UI渲染 ---
     function renderAll() {
         renderTabsAndContent();
         const firstVisibleType = loadedTypes.find(t => t.ui !== 'none');
@@ -180,8 +187,7 @@
         if (document.getElementById(`${CQR_ID_PREFIX}add-category-btn`)) {
             get('add-category-btn').onclick = () => { get('new-category-name').value = ''; toggleModal('add-category-modal', true); get('new-category-name').focus(); };
             renderStickerCategories();
-            // *** 修改点: 移除了自动选择第一个表情包分类的逻辑 ***
-            switchStickerCategory(''); // 传入空字符串以确保不选中任何分类
+            switchStickerCategory('');
         }
     }
 
@@ -194,7 +200,10 @@
     function renderSettingsForm() {
         const form = get('settings-form');
         form.innerHTML = '';
-        loadedTypes.forEach(type => {
+        // 使用一个临时的、可修改的副本来渲染，避免直接修改 loadedTypes
+        const typesForEditing = JSON.parse(JSON.stringify(loadedTypes));
+
+        typesForEditing.forEach(type => {
             const item = document.createElement('div');
             item.className = 'cqr-settings-item';
             item.dataset.typeId = type.id;
@@ -208,20 +217,85 @@
             }
             form.appendChild(item);
         });
+
         form.querySelectorAll('.cqr-settings-delete-type-btn').forEach(btn => {
             btn.onclick = (e) => {
-                const itemToRemove = e.currentTarget.closest('.cqr-settings-item');
-                const idToRemove = itemToRemove.dataset.typeId;
                 if (confirm(`确定要删除这个种类吗？`)) {
-                    loadedTypes = loadedTypes.filter(t => t.id !== idToRemove);
-                    renderSettingsForm();
+                    e.currentTarget.closest('.cqr-settings-item').remove();
                 }
             };
         });
     }
 
-    // --- 7. 事件监听器 ---
+    function renderStickerCategories(){
+        const container = get('sticker-categories');
+        if(!container) return;
+        container.querySelectorAll('.cqr-sticker-category-btn').forEach(btn => btn.remove());
+        Object.keys(stickerData).forEach(name => {
+            const btn = document.createElement("button");
+            btn.className = "cqr-sub-option-btn cqr-sticker-category-btn";
+            btn.textContent = name;
+            btn.dataset.category = name;
+            btn.onclick = () => switchStickerCategory(name);
+            container.appendChild(btn);
+        });
+    }
+
+    function switchStickerCategory(categoryName){
+        currentStickerCategory = categoryName;
+        selectedSticker = null;
+        document.querySelectorAll(".cqr-sticker-category-btn").forEach(btn => {
+            btn.classList.toggle("active", btn.dataset.category === categoryName);
+        });
+        renderStickers(categoryName);
+    }
+
+    function renderStickers(categoryName){
+        const grid = get('sticker-grid');
+        if(!grid) return;
+        grid.innerHTML = "";
+        if (!categoryName || !stickerData[categoryName]) {
+            grid.innerHTML = '<div class="cqr-sticker-placeholder">请选择或添加分类...</div>';
+            return;
+        }
+        const stickers = stickerData[categoryName];
+        if (stickers.length === 0) {
+            grid.innerHTML = '<div class="cqr-sticker-placeholder">该分类下没有表情包...</div>';
+            return;
+        }
+        stickers.forEach((sticker, index) => {
+            const wrapper = document.createElement("div");
+            wrapper.className = "cqr-sticker-wrapper";
+            const img = document.createElement("img");
+            img.src = sticker.url;
+            img.title = sticker.desc;
+            img.className = "cqr-sticker-item";
+            img.onclick = () => {
+                document.querySelectorAll(".cqr-sticker-item.selected").forEach(el => el.classList.remove("selected"));
+                img.classList.add("selected");
+                selectedSticker = sticker;
+            };
+            const delBtn = document.createElement("button");
+            delBtn.innerHTML = "&times;";
+            delBtn.className = "cqr-delete-sticker-btn";
+            delBtn.title = "删除";
+            delBtn.onclick = e => {
+                e.stopPropagation();
+                if (confirm(`确定删除表情「${sticker.desc}」?`)) {
+                    stickerData[currentStickerCategory].splice(index, 1);
+                    saveData(CQR_STICKERS_KEY, stickerData);
+                    renderStickers(currentStickerCategory);
+                }
+            };
+            wrapper.appendChild(img);
+            wrapper.appendChild(delBtn);
+            grid.appendChild(wrapper);
+        });
+    }
+
+    // --- 8. 事件监听器 ---
     function setupEventListeners() {
+        // 主按钮和面板
         mainButton.addEventListener('mousedown', dragHandler);
         mainButton.addEventListener('touchstart', dragHandler, { passive: false });
         document.addEventListener('click', (e) => {
@@ -229,6 +303,7 @@
             if (emojiPicker.style.display === 'block' && !emojiPicker.contains(e.target) && !get('emoji-picker-btn').contains(e.target)) emojiPicker.style.display = 'none';
         });
 
+        // 页脚按钮
         get('recall-button').addEventListener('click', () => {
             const recallType = loadedTypes.find(t => t.ui === 'none');
             if (recallType) insertText(recallType.format);
@@ -266,11 +341,10 @@
                     break;
             }
 
-            if (canSend) {
-                insertAndSendMessage(formattedText);
-            }
+            if (canSend) insertAndSendMessage(formattedText);
         });
 
+        // 设置面板
         get('settings-btn').addEventListener('click', () => {
             renderSettingsForm();
             toggleModal('settings-modal', true);
@@ -298,37 +372,28 @@
         });
         get('settings-save-btn').addEventListener('click', () => {
             const newTypes = [];
-            let hasError = false;
-            get('settings-form').querySelectorAll('.cqr-settings-item').forEach(item => {
+            const formItems = get('settings-form').querySelectorAll('.cqr-settings-item');
+            for (const item of formItems) {
                 const nameInput = item.querySelectorAll('input')[0];
                 const formatInput = item.querySelectorAll('input')[1];
                 if (!nameInput.value.trim()) {
-                    alert('种类名称不能为空！');
-                    hasError = true;
-                    return;
+                    console.error("自定义QR插件：种类名称不能为空！");
+                    return; // 终止保存
                 }
                 const originalType = loadedTypes.find(t => t.id === item.dataset.typeId);
                 const uiType = (originalType && (originalType.ui === 'sticker' || originalType.ui === 'none')) 
                                ? originalType.ui 
                                : (formatInput.value.includes('{duration}') ? 'dual' : 'single');
-
-                newTypes.push({
-                    id: item.dataset.typeId,
-                    name: nameInput.value,
-                    format: formatInput.value,
-                    ui: uiType
-                });
-            });
+                newTypes.push({ id: item.dataset.typeId, name: nameInput.value, format: formatInput.value, ui: uiType });
+            }
             
-            if(hasError) return;
-
             loadedTypes = newTypes;
-            saveTypes();
+            saveData(CQR_TYPES_KEY, loadedTypes);
             renderAll();
             toggleModal('settings-modal', false);
-            alert('设置已保存！');
         });
 
+        // Emoji Picker
         get('emoji-picker-btn').addEventListener('click', e => {
             e.stopPropagation();
             const isVisible = emojiPicker.style.display === 'block';
@@ -354,16 +419,19 @@
             emojiPicker.style.display = 'none';
         });
         
+        // 表情包模态框
         get('cancel-category-btn').addEventListener('click', () => toggleModal('add-category-modal', false));
         get('save-category-btn').addEventListener('click', () => {
             const name = get('new-category-name').value.trim();
             if (name && !stickerData[name]) {
                 stickerData[name] = [];
-                saveStickerData();
+                saveData(CQR_STICKERS_KEY, stickerData);
                 renderStickerCategories();
                 switchStickerCategory(name);
                 toggleModal('add-category-modal', false);
-            } else alert(stickerData[name] ? '该分类已存在！' : '请输入有效的分类名称！');
+            } else {
+                console.error(stickerData[name] ? '该分类已存在！' : '请输入有效的分类名称！');
+            }
         });
         get('cancel-stickers-btn').addEventListener('click', () => toggleModal('add-stickers-modal', false));
         get('save-stickers-btn').addEventListener('click', () => {
@@ -380,30 +448,71 @@
                 }
             });
             if (addedCount > 0) {
-                saveStickerData();
+                saveData(CQR_STICKERS_KEY, stickerData);
                 if (currentStickerCategory === category) renderStickers(category);
                 toggleModal('add-stickers-modal', false);
-            } else { alert('未能解析任何有效的表情包信息。'); }
+            } else {
+                console.error('未能解析任何有效的表情包信息。');
+            }
         });
     }
     
-    // --- 8. 辅助函数与初始化 ---
-    function dragHandler(e) { let isClick = true; if (e.type === 'touchstart') e.preventDefault(); const rect = mainButton.getBoundingClientRect(); const offsetX = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - rect.left; const offsetY = (e.type.includes('mouse') ? e.clientY : e.touches[0].clientY) - rect.top; const move = (e) => { isClick = false; mainButton.classList.add('is-dragging'); let newLeft = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - offsetX; let newTop = (e.type.includes('mouse') ? e.clientY : e.touches[0].clientY) - offsetY; newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - mainButton.offsetWidth)); newTop = Math.max(0, Math.min(newTop, window.innerHeight - mainButton.offsetHeight)); mainButton.style.position = 'fixed'; mainButton.style.left = `${newLeft}px`; mainButton.style.top = `${newTop}px`; }; const end = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', end); document.removeEventListener('touchmove', move); document.removeEventListener('touchend', end); mainButton.classList.remove('is-dragging'); if (isClick) { inputPanel.classList.contains('active') ? hidePanel() : showPanel(); } else { localStorage.setItem(CQR_BUTTON_POS_KEY, JSON.stringify({ top: mainButton.style.top, left: mainButton.style.left })); } }; document.addEventListener('mousemove', move); document.addEventListener('mouseup', end); document.addEventListener('touchmove', move, { passive: false }); document.addEventListener('touchend', end); }
-    function renderStickerCategories(){ const container = get('sticker-categories'); if(!container) return; container.querySelectorAll('.cqr-sticker-category-btn').forEach(btn => btn.remove()); Object.keys(stickerData).forEach(name => { const btn = document.createElement("button"); btn.className = "cqr-sub-option-btn cqr-sticker-category-btn"; btn.textContent = name; btn.dataset.category = name; btn.onclick = () => switchStickerCategory(name); container.appendChild(btn); }); }
-    function switchStickerCategory(categoryName){ currentStickerCategory = categoryName; selectedSticker = null; document.querySelectorAll(".cqr-sticker-category-btn").forEach(btn => { btn.classList.toggle("active", btn.dataset.category === categoryName); }); renderStickers(categoryName); }
-    function renderStickers(categoryName){ const grid = get('sticker-grid'); if(!grid) return; grid.innerHTML = ""; if (!categoryName || !stickerData[categoryName]) { grid.innerHTML = '<div class="cqr-sticker-placeholder">请选择或添加分类...</div>'; return; } const stickers = stickerData[categoryName]; if (stickers.length === 0) { grid.innerHTML = '<div class="cqr-sticker-placeholder">该分类下没有表情包...</div>'; return; } stickers.forEach((sticker, index) => { const wrapper = document.createElement("div"); wrapper.className = "cqr-sticker-wrapper"; const img = document.createElement("img"); img.src = sticker.url; img.title = sticker.desc; img.className = "cqr-sticker-item"; img.onclick = () => { document.querySelectorAll(".cqr-sticker-item.selected").forEach(el => el.classList.remove("selected")); img.classList.add("selected"); selectedSticker = sticker; }; const delBtn = document.createElement("button"); delBtn.innerHTML = "&times;"; delBtn.className = "cqr-delete-sticker-btn"; delBtn.title = "删除"; delBtn.onclick = e => { e.stopPropagation(); if (confirm(`确定删除表情「${sticker.desc}」?`)) { stickerData[currentStickerCategory].splice(index, 1); saveStickerData(); renderStickers(currentStickerCategory); } }; wrapper.appendChild(img); wrapper.appendChild(delBtn); grid.appendChild(wrapper); }); }
-    function showPanel() { const btnRect = mainButton.getBoundingClientRect(); const panelHeight = inputPanel.offsetHeight || 420; const panelWidth = inputPanel.offsetWidth || 380; let top = btnRect.top - panelHeight - 10; if (top < 10) top = btnRect.bottom + 10; let left = btnRect.left + (btnRect.width / 2) - (panelWidth / 2); left = Math.max(10, Math.min(left, window.innerWidth - panelWidth - 10)); inputPanel.style.top = `${top}px`; inputPanel.style.left = `${left}px`; inputPanel.classList.add('active'); }
+    // --- 9. 辅助函数与初始化 ---
+    function dragHandler(e) {
+        let isClick = true;
+        if (e.type === 'touchstart') e.preventDefault();
+        const rect = mainButton.getBoundingClientRect();
+        const offsetX = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - rect.left;
+        const offsetY = (e.type.includes('mouse') ? e.clientY : e.touches[0].clientY) - rect.top;
+        const move = (e) => {
+            isClick = false;
+            mainButton.classList.add('is-dragging');
+            let newLeft = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - offsetX;
+            let newTop = (e.type.includes('mouse') ? e.clientY : e.touches[0].clientY) - offsetY;
+            newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - mainButton.offsetWidth));
+            newTop = Math.max(0, Math.min(newTop, window.innerHeight - mainButton.offsetHeight));
+            mainButton.style.position = 'fixed';
+            mainButton.style.left = `${newLeft}px`;
+            mainButton.style.top = `${newTop}px`;
+        };
+        const end = () => {
+            document.removeEventListener('mousemove', move);
+            document.removeEventListener('mouseup', end);
+            document.removeEventListener('touchmove', move);
+            document.removeEventListener('touchend', end);
+            mainButton.classList.remove('is-dragging');
+            if (isClick) {
+                inputPanel.classList.contains('active') ? hidePanel() : showPanel();
+            } else {
+                saveData(CQR_BUTTON_POS_KEY, { top: mainButton.style.top, left: mainButton.style.left });
+            }
+        };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', end);
+        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('touchend', end);
+    }
+    function showPanel() {
+        const btnRect = mainButton.getBoundingClientRect();
+        const panelHeight = inputPanel.offsetHeight || 420;
+        const panelWidth = inputPanel.offsetWidth || 380;
+        let top = btnRect.top - panelHeight - 10;
+        if (top < 10) top = btnRect.bottom + 10;
+        let left = btnRect.left + (btnRect.width / 2) - (panelWidth / 2);
+        left = Math.max(10, Math.min(left, window.innerWidth - panelWidth - 10));
+        inputPanel.style.top = `${top}px`;
+        inputPanel.style.left = `${left}px`;
+        inputPanel.classList.add('active');
+    }
     function hidePanel() { inputPanel.classList.remove('active'); }
     function toggleModal(modalId, show) { get(modalId).classList.toggle("hidden", !show); }
-    function loadButtonPosition() { const savedPos = JSON.parse(localStorage.getItem(CQR_BUTTON_POS_KEY)); if (savedPos?.top && savedPos?.left) { mainButton.style.position = 'fixed'; mainButton.style.top = savedPos.top; mainButton.style.left = savedPos.left; } }
 
     function init() {
-        loadTypes();
-        loadStickerData();
-        loadButtonPosition();
+        loadData();
         renderAll();
         setupEventListeners();
     }
 
+    // 启动插件
     init();
 })();
