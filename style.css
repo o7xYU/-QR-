@@ -44,10 +44,12 @@
 
 #cip-carrot-button:hover { transform: scale(1.1); }
 #cip-input-panel {
-    position: fixed; width: 350px; max-width: 90vw; display: none;
-    flex-direction: column; z-index: 1001; opacity: 0;
-    transition: opacity var(--cip-transition-speed) ease, transform var(--cip-transition-speed) ease;
-    transform: scale(0.95);
+    position: fixed;
+    width: 350px;
+    max-width: 90vw;
+    display: none;
+    flex-direction: column;
+    z-index: 1001;
 }
 #cip-input-panel.active { display: flex; opacity: 1; transform: scale(1); }
 #cip-panel-tabs { display: flex; padding: 8px; border-bottom: 1px solid var(--cip-border-color); }
