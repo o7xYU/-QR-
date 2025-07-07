@@ -1,4 +1,4 @@
-// script.js (v1.0.2)
+// script.js (v1.0.3)
 (function () {
     if (document.getElementById('cip-carrot-button')) {
         console.log('自定义QR插件：胡萝卜按钮已存在，跳过初始化');
@@ -48,7 +48,7 @@
         const addCategoryModal = create('div', 'cip-add-category-modal', 'cip-modal-backdrop hidden', `
             <div class="cip-modal-content cip-frosted-glass">
                 <h3>添加新分类</h3>
-                <rollup-input type="text" id="cip-new-category-name" placeholder="输入分类名称">
+                <input type="text" id="cip-new-category-name" placeholder="输入分类名称">
                 <div class="cip-modal-actions">
                     <button id="cip-cancel-category-btn">取消</button>
                     <button id="cip-save-category-btn">保存</button>
@@ -148,7 +148,6 @@
         Object.keys(formatTemplates).forEach(tab => {
             if (tab === 'recall') return;
 
-            // 主面板标签
             const tabBtn = document.createElement('button');
             tabBtn.className = `cip-tab-button${tab === currentTab ? ' active' : ''}`;
             tabBtn.dataset.tab = tab;
@@ -172,7 +171,6 @@
             }
             panelTabs.appendChild(tabBtn);
 
-            // 设置面板标签
             const settingsTabBtn = document.createElement('button');
             settingsTabBtn.className = `cip-tab-button${tab === currentTab ? ' active' : ''}`;
             settingsTabBtn.dataset.tab = tab;
@@ -180,7 +178,6 @@
             settingsTabBtn.onclick = () => switchSettingsTab(tab);
             settingsTabs.appendChild(settingsTabBtn);
 
-            // 主面板内容
             let contentHtml = '';
             if (tab === 'text') {
                 contentHtml = `
@@ -216,7 +213,6 @@
             }
             panelContent.insertAdjacentHTML('beforeend', contentHtml);
 
-            // 设置面板内容
             let settingsContentHtml = '';
             if (tab === 'text') {
                 settingsContentHtml = `
@@ -444,30 +440,26 @@
     emojiPickerBtn.addEventListener('click', e => {
         e.stopPropagation();
         const isVisible = emojiPicker.style.display === 'block';
-        if (isVisible) {
-            emojiPicker.style.display = 'none';
-        } else {
+        emojiPicker.style.display = isVisible ? 'none' : 'block';
+        if (!isVisible) {
             const btnRect = emojiPickerBtn.getBoundingClientRect();
             let top = btnRect.top - 350 - 10;
             if (top < 10) top = btnRect.bottom + 10;
             emojiPicker.style.top = `${top}px`;
             emojiPicker.style.left = `${btnRect.left}px`;
-            emojiPicker.style.display = 'block';
         }
     });
 
     settingsBtn.addEventListener('click', e => {
         e.stopPropagation();
         const isVisible = settingsPanel.style.display === 'block';
-        if (isVisible) {
-            settingsPanel.style.display = 'none';
-        } else {
+        settingsPanel.style.display = isVisible ? 'none' : 'block';
+        if (!isVisible) {
             const btnRect = settingsBtn.getBoundingClientRect();
             let top = btnRect.top - 350 - 10;
             if (top < 10) top = btnRect.bottom + 10;
             settingsPanel.style.top = `${top}px`;
             settingsPanel.style.left = `${btnRect.left}px`;
-            settingsPanel.style.display = 'block';
             updateSettingsFormatInput();
         }
     });
@@ -593,7 +585,7 @@
     });
 
     function showPanel() {
-        if (inputPanel.classList.contains('active')) return;
+        inputPanel.style.display = 'block';
         const btnRect = carrotButton.getBoundingClientRect();
         const panelHeight = inputPanel.offsetHeight || 380;
         let top = btnRect.top - panelHeight - 10;
@@ -604,19 +596,18 @@
         left = Math.max(10, Math.min(left, window.innerWidth - inputPanel.offsetWidth - 10));
         inputPanel.style.top = `${top}px`;
         inputPanel.style.left = `${left}px`;
-        inputPanel.classList.add('active');
         console.log('自定义QR插件：显示输入面板');
     }
 
     function hidePanel() {
-        inputPanel.classList.remove('active');
+        inputPanel.style.display = 'none';
         settingsPanel.style.display = 'none';
         emojiPicker.style.display = 'none';
         console.log('自定义QR插件：隐藏输入面板');
     }
 
     document.addEventListener('click', (e) => {
-        if (inputPanel.classList.contains('active') && !inputPanel.contains(e.target) && !carrotButton.contains(e.target)) {
+        if (!inputPanel.contains(e.target) && !carrotButton.contains(e.target)) {
             hidePanel();
         }
         if (emojiPicker.style.display === 'block' && !emojiPicker.contains(e.target) && !emojiPickerBtn.contains(e.target)) {
@@ -633,49 +624,53 @@
             e.preventDefault();
         }
         const rect = carrotButton.getBoundingClientRect();
-        const offsetX = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - rect.left;
-        const offsetY = (e.type.includes('mouse') ? e.clientY : e.touches[0].clientY) - rect.top;
-        const move = (e) => {
+        const offsetX = (e.type === 'mousedown' ? e.clientX : e.touches[0].clientX) - rect.left;
+        const offsetY = (e.type === 'mousedown' ? e.clientY : e.touches[0].clientY) - rect.top;
+        function move(e) {
             isClick = false;
             carrotButton.classList.add('is-dragging');
-            let newLeft = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - offsetX;
-            let newTop = (e.type.includes('mouse') ? e.clientY : e.touches[0].clientY) - offsetY;
+            const clientX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
+            const clientY = e.type === 'mousemove' ? e.clientY : e.touches[0].clientY;
+            let newLeft = clientX - offsetX;
+            let newTop = clientY - offsetY;
             newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - carrotButton.offsetWidth));
             newTop = Math.max(0, Math.min(newTop, window.innerHeight - carrotButton.offsetHeight));
-            carrotButton.style.position = 'fixed';
             carrotButton.style.left = `${newLeft}px`;
             carrotButton.style.top = `${newTop}px`;
-            console.log(`自定义QR插件：拖动胡萝卜按钮到 (${newLeft}px, ${newTop}px)`);
-        };
-        const end = () => {
+        }
+        function end() {
             document.removeEventListener('mousemove', move);
             document.removeEventListener('mouseup', end);
             document.removeEventListener('touchmove', move);
             document.removeEventListener('touchend', end);
             carrotButton.classList.remove('is-dragging');
-            if (isClick) {
-                inputPanel.classList.contains('active') ? hidePanel() : showPanel();
-            } else {
-                localStorage.setItem('cip_button_position_v4', JSON.stringify({ top: carrotButton.style.top, left: carrotButton.style.left }));
+            if (!isClick) {
+                localStorage.setItem('cip_button_position', JSON.stringify({
+                    top: carrotButton.style.top,
+                    left: carrotButton.style.left
+                }));
                 console.log('自定义QR插件：保存胡萝卜按钮位置');
+            } else {
+                inputPanel.style.display === 'block' ? hidePanel() : showPanel();
             }
-        };
+        }
         document.addEventListener('mousemove', move);
         document.addEventListener('mouseup', end);
-        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('touchmove', move);
         document.addEventListener('touchend', end);
     }
 
     carrotButton.addEventListener('mousedown', dragHandler);
-    carrotButton.addEventListener('touchstart', dragHandler, { passive: false });
+    carrotButton.addEventListener('touchstart', dragHandler);
 
     function loadButtonPosition() {
-        const savedPos = JSON.parse(localStorage.getItem('cip_button_position_v4'));
-        if (savedPos?.top && savedPos?.left) {
+        const pos = localStorage.getItem('cip_button_position');
+        if (pos) {
+            const { top, left } = JSON.parse(pos);
             carrotButton.style.position = 'fixed';
-            carrotButton.style.top = savedPos.top;
-            carrotButton.style.left = savedPos.left;
-            console.log(`自定义QR插件：加载胡萝卜按钮位置 (${savedPos.left}, ${savedPos.top})`);
+            carrotButton.style.top = top;
+            carrotButton.style.left = left;
+            console.log(`自定义QR插件：加载胡萝卜按钮位置 (${left}, ${top})`);
         }
     }
 
