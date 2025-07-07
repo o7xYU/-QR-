@@ -1,4 +1,4 @@
-// script.js (v1.0.1)
+// script.js (v1.0.2)
 (function () {
     if (document.getElementById('cip-carrot-button')) {
         console.log('自定义QR插件：胡萝卜按钮已存在，跳过初始化');
@@ -48,7 +48,7 @@
         const addCategoryModal = create('div', 'cip-add-category-modal', 'cip-modal-backdrop hidden', `
             <div class="cip-modal-content cip-frosted-glass">
                 <h3>添加新分类</h3>
-                <input type="text" id="cip-new-category-name" placeholder="输入分类名称">
+                <rollup-input type="text" id="cip-new-category-name" placeholder="输入分类名称">
                 <div class="cip-modal-actions">
                     <button id="cip-cancel-category-btn">取消</button>
                     <button id="cip-save-category-btn">保存</button>
@@ -93,7 +93,7 @@
         document.body.appendChild(addStickersModal);
         document.body.appendChild(addTabModal);
     } else {
-        console.error("自定义QR插件：未能找到SillyTavern的UI挂载点，尝试直接注入到body");
+        console.error('自定义QR插件：未能找到SillyTavern的UI挂载点，尝试直接注入到body');
         document.body.appendChild(carrotButton);
         document.body.appendChild(inputPanel);
         document.body.appendChild(settingsPanel);
@@ -334,60 +334,73 @@
 
     function switchStickerCategory(t) {
         currentStickerCategory = t;
-        queryAll(".cip-st inflam-category-btn").forEach(e => e.classList.toggle("active", e.dataset.category === t));
+        queryAll(".cip-sticker-category-btn").forEach(e => e.classList.toggle("active", e.dataset.category === t));
         renderStickers(t);
         selectedSticker = null;
         updateFormatDisplay();
     }
 
     function renderStickers(t) {
-        if (stickerGrid.innerHTML = "", !t || !stickerData[t]) return void (stickerGrid.innerHTML = '<div class="cip-sticker-placeholder">请先选择或添加一个分类...</div>');
-        const o = stickerData[t];
-        if (0 === o.length) return void (stickerGrid.innerHTML = '<div class="cip-sticker-placeholder">这个分类还没有表情包...</div>');
-        o.forEach((t, o) => {
-            const e = document.createElement("div");
-            e.className = "cip-sticker-wrapper";
-            const i = document.createElement("img");
-            i.src = t.url, i.title = t.desc, i.className = "cip-sticker-item";
-            i.onclick = () => {
+        stickerGrid.innerHTML = "";
+        if (!t || !stickerData[t]) {
+            stickerGrid.innerHTML = '<div class="cip-sticker-placeholder">请先选择或添加一个分类...</div>';
+            return;
+        }
+        const stickers = stickerData[t];
+        if (stickers.length === 0) {
+            stickerGrid.innerHTML = '<div class="cip-sticker-placeholder">这个分类还没有表情包...</div>';
+            return;
+        }
+        stickers.forEach((sticker, index) => {
+            const wrapper = document.createElement("div");
+            wrapper.className = "cip-sticker-wrapper";
+            const img = document.createElement("img");
+            img.src = sticker.url;
+            img.title = sticker.desc;
+            img.className = "cip-sticker-item";
+            img.onclick = () => {
                 queryAll(".cip-sticker-item.selected").forEach(e => e.classList.remove("selected"));
-                i.classList.add("selected");
-                selectedSticker = t;
+                img.classList.add("selected");
+                selectedSticker = sticker;
             };
-            const n = document.createElement("button");
-            n.innerHTML = "×";
-            n.className = "cip-delete-sticker-btn";
-            n.title = "删除这个表情包";
-            n.onclick = e => {
+            const deleteBtn = document.createElement("button");
+            deleteBtn.innerHTML = "×";
+            deleteBtn.className = "cip-delete-sticker-btn";
+            deleteBtn.title = "删除这个表情包";
+            deleteBtn.onclick = e => {
                 e.stopPropagation();
-                confirm(`确定删除表情「${t.desc}」?`) && (stickerData[currentStickerCategory].splice(o, 1), saveStickerData(), renderStickers(currentStickerCategory));
+                if (confirm(`确定删除表情「${sticker.desc}」?`)) {
+                    stickerData[currentStickerCategory].splice(index, 1);
+                    saveStickerData();
+                    renderStickers(currentStickerCategory);
+                }
             };
-            e.appendChild(i);
-            e.appendChild(n);
-            stickerGrid.appendChild(e);
+            wrapper.appendChild(img);
+            wrapper.appendChild(deleteBtn);
+            stickerGrid.appendChild(wrapper);
         });
     }
 
     function renderCategories() {
         queryAll(".cip-sticker-category-btn").forEach(e => e.remove());
-        Object.keys(stickerData).forEach(t => {
-            const o = document.createElement("button");
-            const e = document.createElement("span");
-            e.textContent = t;
-            o.appendChild(e);
-            o.className = "cip-sub-option-btn cip-sticker-category-btn";
-            o.dataset.category = t;
-            o.onclick = () => switchStickerCategory(t);
-            stickerCategoriesContainer.appendChild(o);
+        Object.keys(stickerData).forEach(category => {
+            const btn = document.createElement("button");
+            const span = document.createElement("span");
+            span.textContent = category;
+            btn.appendChild(span);
+            btn.className = "cip-sub-option-btn cip-sticker-category-btn";
+            btn.dataset.category = category;
+            btn.onclick = () => switchStickerCategory(category);
+            stickerCategoriesContainer.appendChild(btn);
         });
     }
 
-    function insertIntoSillyTavern(t) {
-        const o = document.querySelector("#send_textarea");
-        if (o) {
-            o.value += (o.value.trim() ? "\n" : "") + t;
-            o.dispatchEvent(new Event("input", { bubbles: true }));
-            o.focus();
+    function insertIntoSillyTavern(text) {
+        const textarea = document.querySelector("#send_textarea");
+        if (textarea) {
+            textarea.value += (textarea.value.trim() ? "\n" : "") + text;
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+            textarea.focus();
         } else {
             alert("未能找到SillyTavern的输入框！");
         }
@@ -398,18 +411,20 @@
     }
 
     function loadStickerData() {
-        const t = localStorage.getItem("cip_sticker_data");
-        t && (stickerData = JSON.parse(t));
+        const data = localStorage.getItem("cip_sticker_data");
+        if (data) {
+            stickerData = JSON.parse(data);
+        }
     }
 
-    function toggleModal(t, o) {
-        get(t).classList.toggle("hidden", !o);
+    function toggleModal(id, show) {
+        get(id).classList.toggle("hidden", !show);
     }
 
-    function openAddStickersModal(t) {
-        addStickerTitle.textContent = `为「${t}」分类添加表情包`;
+    function openAddStickersModal(category) {
+        addStickerTitle.textContent = `为「${category}」分类添加表情包`;
         newStickersInput.value = "";
-        addStickersModal.dataset.currentCategory = t;
+        addStickersModal.dataset.currentCategory = category;
         toggleModal("cip-add-stickers-modal", true);
         newStickersInput.focus();
     }
@@ -421,7 +436,7 @@
             const { selectionStart, selectionEnd, value } = target;
             target.value = value.substring(0, selectionStart) + emoji + value.substring(selectionEnd);
             target.focus();
-            target.selection Ohio = selectionStart + emoji.length;
+            target.selectionEnd = selectionStart + emoji.length;
         }
         emojiPicker.style.display = 'none';
     });
@@ -582,7 +597,9 @@
         const btnRect = carrotButton.getBoundingClientRect();
         const panelHeight = inputPanel.offsetHeight || 380;
         let top = btnRect.top - panelHeight - 10;
-        if (top < 10) { top = btnRect.bottom + 10; }
+        if (top < 10) {
+            top = btnRect.bottom + 10;
+        }
         let left = btnRect.left + (btnRect.width / 2) - (inputPanel.offsetWidth / 2);
         left = Math.max(10, Math.min(left, window.innerWidth - inputPanel.offsetWidth - 10));
         inputPanel.style.top = `${top}px`;
@@ -599,7 +616,9 @@
     }
 
     document.addEventListener('click', (e) => {
-        if (inputPanel.classList.contains('active') && !inputPanel.contains(e.target) && !carrotButton.contains(e.target)) hidePanel();
+        if (inputPanel.classList.contains('active') && !inputPanel.contains(e.target) && !carrotButton.contains(e.target)) {
+            hidePanel();
+        }
         if (emojiPicker.style.display === 'block' && !emojiPicker.contains(e.target) && !emojiPickerBtn.contains(e.target)) {
             emojiPicker.style.display = 'none';
         }
@@ -610,7 +629,9 @@
 
     function dragHandler(e) {
         let isClick = true;
-        if (e.type === 'touchstart') e.preventDefault();
+        if (e.type === 'touchstart') {
+            e.preventDefault();
+        }
         const rect = carrotButton.getBoundingClientRect();
         const offsetX = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - rect.left;
         const offsetY = (e.type.includes('mouse') ? e.clientY : e.touches[0].clientY) - rect.top;
@@ -655,12 +676,6 @@
             carrotButton.style.top = savedPos.top;
             carrotButton.style.left = savedPos.left;
             console.log(`自定义QR插件：加载胡萝卜按钮位置 (${savedPos.left}, ${savedPos.top})`);
-        } else {
-            // 默认位置
-            carrotButton.style.position = 'fixed';
-            carrotButton.style.top = '80px';
-            carrotButton.style.right = '20px';
-            console.log('自定义QR插件：未找到保存的位置，使用默认位置 (right: 20px, top: 80px)');
         }
     }
 
@@ -673,12 +688,8 @@
         loadButtonPosition();
         switchStickerCategory(Object.keys(stickerData)[0] || '');
         switchTab('text');
-        carrotButton.style.display = 'block'; // 确保胡萝卜按钮显示
         console.log('自定义QR插件：初始化完成，胡萝卜按钮应可见');
     }
 
-    // 延迟初始化以确保 DOM 加载完成
-    window.addEventListener('load', () => {
-        setTimeout(init, 1000); // 延迟 1 秒以确保 SillyTavern 的 DOM 加载
-    });
+    init();
 })();
