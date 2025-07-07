@@ -1,4 +1,4 @@
-// script.js (Custom QR Plugin v1.3 - Modified from original)
+// script.js (Custom QR Plugin v1.4 - Mobile Fix)
 (function () {
     if (document.getElementById('cip-carrot-button')) return;
 
@@ -21,7 +21,7 @@
     const defaultFormats = [
         { id: 'text', name: '文字信息', format: '“{content}”', type: 'textarea', placeholder: '在此输入文字...' },
         { id: 'voice', name: '语音', format: "={duration}'|{message}=", type: 'dual_input', placeholder: '输入语音识别出的内容...', placeholder2: '输入时长 (秒, 仅数字)' },
-        { id: 'bunny', name: '作弊模式', format: '({content})', type: 'textarea', placeholder: '在此输入想对AI说的话...' },
+        { id: 'bunny', name: '作弊模式', format: '({content})', type: 'textarea', placeholder: '在此输入想对BUNNY说的话...' },
         { id: 'stickers', name: '表情包', format: '!{desc}|{url}!', type: 'sticker' }
     ];
 
@@ -72,6 +72,46 @@
         `);
 
         return { carrotButton, inputPanel, emojiPicker, addCategoryModal, addStickersModal, settingsModal };
+    }
+
+    // --- 1.5. 注入响应式样式 ---
+    function injectResponsiveStyles() {
+        const style = document.createElement('style');
+        style.textContent = `
+            @media (max-width: 600px) {
+                /* 调整设置面板在手机上的宽度和布局 */
+                #cip-settings-modal .cip-modal-content {
+                    width: 95vw;
+                    padding: 15px;
+                }
+                .cip-format-item {
+                    grid-template-columns: 1fr auto; /* 名称和格式占满，删除按钮在右侧 */
+                    grid-template-areas: 
+                        "name delete"
+                        "format format";
+                    row-gap: 8px;
+                }
+                .cip-format-item .cip-format-name-input { grid-area: name; }
+                .cip-format-item .cip-format-format-input { grid-area: format; }
+                .cip-format-item .cip-delete-format-btn { grid-area: delete; justify-self: end; }
+
+                /* 调整设置面板底部的按钮布局 */
+                #cip-settings-modal .cip-modal-actions {
+                    flex-direction: column;
+                    gap: 12px;
+                    align-items: stretch; /* 让按钮宽度撑满 */
+                }
+                #cip-settings-modal .cip-modal-actions > div {
+                    display: flex;
+                    gap: 10px;
+                    justify-content: flex-end;
+                }
+                #cip-settings-modal .cip-modal-actions > div > button {
+                    flex-grow: 1; /* 让关闭和保存按钮平分空间 */
+                }
+            }
+        `;
+        document.head.appendChild(style);
     }
 
     // --- 2. 注入UI到页面中 ---
@@ -499,6 +539,7 @@
     }
 
     function init() {
+        injectResponsiveStyles(); // NEW: Call the function
         loadFormats();
         loadStickerData();
         loadButtonPosition();
