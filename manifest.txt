@@ -1,0 +1,9 @@
+{
+  "name": "carrot-input-panel",
+  "display_name": "定制化快捷输入插件",
+  "version": "1.0/由BunnY制作",
+  "manifest_version": 1,
+  "description": "一个完全可定制的、提供多种格式化输入选项的浮动面板，由一个可拖拽的胡萝卜按钮触发。",
+  "js": ["script.js"],
+  "css": ["style.css"]
+}
